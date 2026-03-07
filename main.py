@@ -1,10 +1,14 @@
 import random
 from dataclasses import dataclass, field
-from typing import Dict, List, Tuple
+from typing import Dict, List, Literal, Optional, Tuple
+from uuid import uuid4
+
+from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel, Field
 
 
-def money(value: float) -> str:
-    return f"${value:,.0f}"
+UpgradeType = Literal["capability", "safety", "efficiency", "market"]
 
 
 @dataclass
@@ -19,7 +23,7 @@ class ModelUnit:
     def level_sum(self) -> int:
         return self.capability + self.safety + self.efficiency + self.market
 
-    def next_upgrade_cost(self, upgrade_type: str) -> int:
+    def next_upgrade_cost(self, upgrade_type: UpgradeType) -> int:
         current_level = getattr(self, upgrade_type)
         base_costs = {
             "capability": 700_000,
@@ -50,6 +54,53 @@ class CompanyState:
         return self.cash / burn
 
 
+@dataclass
+class QuarterOutcome:
+    revenue: float
+    gross_profit: float
+    operating_costs: float
+    incident_costs: float
+    net_profit: float
+    incidents: int
+    score: float
+    band: str
+    runway_quarters: float
+    pre_money: float
+    raise_amount: float
+    post_money: float
+    dilution: float
+
+
+@dataclass
+class PendingRound:
+    outcome: QuarterOutcome
+
+
+@dataclass
+class GameSession:
+    state: CompanyState
+    quarter_spent: int = 0
+    quarter_actions: List[str] = field(default_factory=list)
+    pending_round: Optional[PendingRound] = None
+
+
+class NewGameRequest(BaseModel):
+    company_name: str = "NovaForge AI"
+
+
+class UpgradeAction(BaseModel):
+    model_index: int = Field(ge=0)
+    upgrade_type: UpgradeType
+
+
+class ApplyUpgradesRequest(BaseModel):
+    upgrades: List[UpgradeAction]
+
+
+class FundingDecisionRequest(BaseModel):
+    accept: bool
+
+
 UPGRADE_EFFECTS: Dict[str, Dict[str, float]] = {
     "capability": {"quality": 6.5, "demand": 4.0},
     "safety": {"reliability": 8.0, "trust": 1.2},
@@ -57,91 +108,33 @@ UPGRADE_EFFECTS: Dict[str, Dict[str, float]] = {
     "market": {"demand": 7.0, "price_power": 0.015},
 }
 
+games: Dict[str, GameSession] = {}
+
+app = FastAPI(title="NovaForge AI API", version="1.0.0")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 
 def clamp(value: float, low: float, high: float) -> float:
     return max(low, min(value, high))
 
 
-def show_dashboard(state: CompanyState) -> None:
-    print("\n" + "=" * 70)
-    print(f"{state.name} | Year {state.year} Quarter {state.quarter}")
-    print("=" * 70)
-    print(f"Cash: {money(state.cash)}")
-    print(f"Valuation (mark): {money(state.valuation)}")
-    print(f"Reputation: {state.reputation:.1f}/100")
-    print(f"Compliance: {state.compliance:.1f}/100")
-    print(f"Last Quarter Revenue: {money(state.last_quarter_revenue)}")
-    print(f"Last Quarter Profit : {money(state.last_quarter_profit)}")
-    print(f"Total Incidents: {state.total_incidents}")
-
-    print("\nModel Portfolio")
-    for idx, model in enumerate(state.models, start=1):
-        print(
-            f"{idx}. {model.name:<14}"
-            f" Cap:{model.capability} Saf:{model.safety}"
-            f" Eff:{model.efficiency} Mkt:{model.market}"
-            f" Live:{model.quarters_live}Q"
-        )
-
-
 def quarter_budget_limit(state: CompanyState) -> int:
-    # Constrained budget: spend only a fraction of cash each quarter.
     return int(min(5_500_000, max(1_000_000, state.cash * 0.42)))
 
 
-def choose_upgrades(state: CompanyState) -> Tuple[int, List[str]]:
-    budget = quarter_budget_limit(state)
-    spent = 0
-    actions: List[str] = []
-    upgrade_keys = ["capability", "safety", "efficiency", "market"]
-
-    print("\nCapital Planning")
-    print(f"Quarterly R&D budget cap: {money(budget)}")
-    print("You can apply upgrades until you type 'done'.")
-
-    while True:
-        remaining = budget - spent
-        print(f"\nBudget remaining: {money(remaining)}")
-        print("Select model number, or type 'done':")
-
-        for idx, model in enumerate(state.models, start=1):
-            print(f"{idx}. {model.name}")
-
-        model_choice = input("> ").strip().lower()
-        if model_choice == "done":
-            break
-        if not model_choice.isdigit() or not (1 <= int(model_choice) <= len(state.models)):
-            print("Invalid model choice. Try again.")
-            continue
-
-        model = state.models[int(model_choice) - 1]
-
-        print(f"\nUpgrades for {model.name}:")
-        for i, key in enumerate(upgrade_keys, start=1):
-            cost = model.next_upgrade_cost(key)
-            effects = UPGRADE_EFFECTS[key]
-            effect_text = ", ".join([f"{k}+{v}" for k, v in effects.items()])
-            print(f"{i}. {key:<10} Cost {money(cost):>11} | {effect_text}")
-
-        upgrade_choice = input("Pick upgrade (1-4), or 'back': ").strip().lower()
-        if upgrade_choice == "back":
-            continue
-        if not upgrade_choice.isdigit() or not (1 <= int(upgrade_choice) <= 4):
-            print("Invalid upgrade choice. Try again.")
-            continue
-
-        upgrade_key = upgrade_keys[int(upgrade_choice) - 1]
-        cost = model.next_upgrade_cost(upgrade_key)
-        if cost > remaining:
-            print("Not enough budget left for that upgrade.")
-            continue
-
-        setattr(model, upgrade_key, getattr(model, upgrade_key) + 1)
-        spent += cost
-        actions.append(f"{model.name}: upgraded {upgrade_key} for {money(cost)}")
-        print(f"Applied. {model.name} {upgrade_key} is now level {getattr(model, upgrade_key)}.")
-
-    return spent, actions
+def state_status(state: CompanyState) -> str:
+    if state.cash <= 0:
+        return "bankrupt"
+    if state.year >= 4:
+        return "completed"
+    return "active"
 
 
 def simulate_model_outcome(model: ModelUnit, state: CompanyState) -> Dict[str, float]:
@@ -235,32 +228,135 @@ def funding_offer(state: CompanyState, score: float, revenue: float) -> Tuple[fl
     return pre_money, raise_amount, dilution
 
 
-def ask_yes_no(prompt: str, default_yes: bool = True) -> bool:
-    suffix = " [Y/n]: " if default_yes else " [y/N]: "
-    while True:
-        answer = input(prompt + suffix).strip().lower()
-        if not answer:
-            return default_yes
-        if answer in {"y", "yes"}:
-            return True
-        if answer in {"n", "no"}:
-            return False
-        print("Please answer y or n.")
+def serialize_state(state: CompanyState) -> Dict[str, object]:
+    return {
+        "name": state.name,
+        "quarter": state.quarter,
+        "year": state.year,
+        "cash": state.cash,
+        "valuation": state.valuation,
+        "reputation": state.reputation,
+        "compliance": state.compliance,
+        "last_quarter_revenue": state.last_quarter_revenue,
+        "last_quarter_profit": state.last_quarter_profit,
+        "total_incidents": state.total_incidents,
+        "models": [
+            {
+                "name": m.name,
+                "capability": m.capability,
+                "safety": m.safety,
+                "efficiency": m.efficiency,
+                "market": m.market,
+                "quarters_live": m.quarters_live,
+            }
+            for m in state.models
+        ],
+    }
 
 
-def run_quarter(state: CompanyState) -> bool:
-    show_dashboard(state)
+def serialize_session(game_id: str, session: GameSession) -> Dict[str, object]:
+    budget_cap = quarter_budget_limit(session.state)
+    remaining = max(0, budget_cap - session.quarter_spent)
+    payload: Dict[str, object] = {
+        "game_id": game_id,
+        "status": state_status(session.state),
+        "state": serialize_state(session.state),
+        "budget": {
+            "cap": budget_cap,
+            "spent": session.quarter_spent,
+            "remaining": remaining,
+            "actions": session.quarter_actions,
+        },
+        "upgrade_effects": UPGRADE_EFFECTS,
+    }
 
-    spend, actions = choose_upgrades(state)
-    state.cash -= spend
+    if session.pending_round:
+        payload["pending_round"] = {
+            "quarter_outcome": session.pending_round.outcome.__dict__,
+        }
 
-    print("\nUpgrade Summary")
-    if actions:
-        for line in actions:
-            print(f"- {line}")
-    else:
-        print("- No upgrades purchased this quarter.")
-    print(f"Total upgrade spend: {money(spend)}")
+    return payload
+
+
+def get_session(game_id: str) -> GameSession:
+    session = games.get(game_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Game session not found")
+    return session
+
+
+@app.get("/")
+def root() -> Dict[str, str]:
+    return {
+        "message": "NovaForge API is running",
+        "docs": "/docs",
+    }
+
+
+@app.post("/games")
+def create_game(request: NewGameRequest) -> Dict[str, object]:
+    state = CompanyState(
+        name=request.company_name,
+        models=[
+            ModelUnit(name="Atlas Assist"),
+            ModelUnit(name="Vision Copilot"),
+            ModelUnit(name="Ops Automator"),
+        ],
+    )
+
+    game_id = str(uuid4())
+    games[game_id] = GameSession(state=state)
+    return serialize_session(game_id, games[game_id])
+
+
+@app.get("/games/{game_id}")
+def get_game(game_id: str) -> Dict[str, object]:
+    session = get_session(game_id)
+    return serialize_session(game_id, session)
+
+
+@app.post("/games/{game_id}/upgrades")
+def apply_upgrades(game_id: str, request: ApplyUpgradesRequest) -> Dict[str, object]:
+    session = get_session(game_id)
+
+    if session.pending_round:
+        raise HTTPException(status_code=400, detail="Resolve funding decision before more upgrades")
+
+    if state_status(session.state) != "active":
+        raise HTTPException(status_code=400, detail="Game is not active")
+
+    budget_cap = quarter_budget_limit(session.state)
+
+    for action in request.upgrades:
+        if action.model_index >= len(session.state.models):
+            raise HTTPException(status_code=400, detail=f"Invalid model_index: {action.model_index}")
+
+        model = session.state.models[action.model_index]
+        cost = model.next_upgrade_cost(action.upgrade_type)
+        if session.quarter_spent + cost > budget_cap:
+            raise HTTPException(status_code=400, detail="Quarterly budget exceeded")
+
+        setattr(model, action.upgrade_type, getattr(model, action.upgrade_type) + 1)
+        session.quarter_spent += cost
+        session.quarter_actions.append(
+            f"{model.name}: upgraded {action.upgrade_type} for {cost}"
+        )
+
+    return serialize_session(game_id, session)
+
+
+@app.post("/games/{game_id}/quarters/run")
+def run_quarter(game_id: str) -> Dict[str, object]:
+    session = get_session(game_id)
+    state = session.state
+
+    if session.pending_round:
+        raise HTTPException(status_code=400, detail="Funding decision already pending")
+
+    if state_status(state) != "active":
+        raise HTTPException(status_code=400, detail="Game is not active")
+
+    state.cash -= session.quarter_spent
 
     model_results = [simulate_model_outcome(model, state) for model in state.models]
     total_revenue = sum(m["revenue"] for m in model_results)
@@ -283,14 +379,6 @@ def run_quarter(state: CompanyState) -> bool:
     state.compliance = clamp(state.compliance + compliance_gain - total_compliance_hit, 10, 100)
     state.total_incidents += incidents
 
-    print("\nQuarter Results")
-    print(f"Revenue         : {money(total_revenue)}")
-    print(f"Gross Profit    : {money(total_gross_profit)}")
-    print(f"Operating Costs : {money(base_burn)}")
-    print(f"Incident Costs  : {money(incident_costs)}")
-    print(f"Net Profit      : {money(operating_profit)}")
-    print(f"Incidents       : {incidents}")
-
     score, band = evaluate_company(
         state=state,
         revenue=total_revenue,
@@ -299,86 +387,54 @@ def run_quarter(state: CompanyState) -> bool:
         avg_reliability=avg_reliability,
     )
 
-    print("\nQuarterly Board Evaluation")
-    print(f"Score: {score:.1f}/100 ({band})")
-    print(f"Runway: {state.runway_quarters(base_burn):.1f} quarters")
-
     pre_money, raise_amount, dilution = funding_offer(state, score, total_revenue)
     post_money = pre_money + raise_amount
 
-    print("\nFunding Term Sheet")
-    print(f"Pre-money valuation: {money(pre_money)}")
-    print(f"Capital offered    : {money(raise_amount)}")
-    print(f"Post-money         : {money(post_money)}")
-    print(f"Dilution           : {dilution * 100:.2f}%")
-
-    if ask_yes_no("Accept this funding round?", default_yes=state.cash < 3_000_000):
-        state.cash += raise_amount
-        state.valuation = post_money
-        print("Funding accepted.")
-    else:
-        state.valuation = max(pre_money, state.valuation * 0.98)
-        print("Funding declined. Investors are watching execution closely.")
+    outcome = QuarterOutcome(
+        revenue=total_revenue,
+        gross_profit=total_gross_profit,
+        operating_costs=base_burn,
+        incident_costs=incident_costs,
+        net_profit=operating_profit,
+        incidents=incidents,
+        score=score,
+        band=band,
+        runway_quarters=state.runway_quarters(base_burn),
+        pre_money=pre_money,
+        raise_amount=raise_amount,
+        post_money=post_money,
+        dilution=dilution,
+    )
 
     state.last_quarter_revenue = total_revenue
     state.last_quarter_profit = operating_profit
+    session.pending_round = PendingRound(outcome=outcome)
+
+    return serialize_session(game_id, session)
+
+
+@app.post("/games/{game_id}/funding")
+def decide_funding(game_id: str, request: FundingDecisionRequest) -> Dict[str, object]:
+    session = get_session(game_id)
+    state = session.state
+
+    if not session.pending_round:
+        raise HTTPException(status_code=400, detail="No pending funding offer")
+
+    offer = session.pending_round.outcome
+    if request.accept:
+        state.cash += offer.raise_amount
+        state.valuation = offer.post_money
+    else:
+        state.valuation = max(offer.pre_money, state.valuation * 0.98)
 
     state.quarter += 1
     if state.quarter > 4:
         state.quarter = 1
         state.year += 1
 
-    if state.cash <= 0:
-        print("\nCompany is out of cash. Simulation ended.")
-        return False
+    session.quarter_spent = 0
+    session.quarter_actions = []
+    session.pending_round = None
 
-    return True
-
-
-def print_intro() -> None:
-    print("=" * 70)
-    print("AI Funding Simulator")
-    print("=" * 70)
-    print("Manage an AI startup across quarters.")
-    print("- Choose which models to upgrade")
-    print("- Stay within a constrained quarterly budget")
-    print("- Review quarter-end performance and board evaluation")
-    print("- Accept or reject funding offers")
-    print("Goal: reach Year 4 with healthy cash and high company score.")
-
-
-def main() -> None:
-    random.seed()
-    print_intro()
-
-    state = CompanyState(
-        models=[
-            ModelUnit(name="Atlas Assist"),
-            ModelUnit(name="Vision Copilot"),
-            ModelUnit(name="Ops Automator"),
-        ]
-    )
-
-    while True:
-        keep_going = run_quarter(state)
-        if not keep_going:
-            break
-
-        if state.year >= 4:
-            print("\nYou reached Year 4.")
-            final_health = (state.reputation + state.compliance) / 2
-            if state.cash > 5_000_000 and final_health > 72:
-                print("Result: Strong outcome. You built a resilient company.")
-            elif state.cash > 1_000_000:
-                print("Result: Survived with mixed performance.")
-            else:
-                print("Result: Growth happened, but finances remain fragile.")
-            break
-
-        if not ask_yes_no("Continue to next quarter?", default_yes=True):
-            print("Simulation ended by player.")
-            break
-
-
-if __name__ == "__main__":
-    main()
+    return serialize_session(game_id, session)
