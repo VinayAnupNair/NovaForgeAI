@@ -68,6 +68,7 @@ class QuarterHistoryPointResponse(BaseModel):
     incidents: int
     score: float
     competitive_pressure: float
+    rival_valuation: float
 
 
 class ModelPerformanceResponse(BaseModel):

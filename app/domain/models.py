@@ -145,6 +145,7 @@ class QuarterHistoryPoint:
     incidents: int
     score: float
     competitive_pressure: float
+    rival_valuation: float
 
 
 @dataclass

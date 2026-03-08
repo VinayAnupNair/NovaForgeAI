@@ -525,7 +525,7 @@ h1 {
 .analytics-grid {
   margin-top: 0;
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 0.18rem;
   height: 100%;
 }
@@ -534,7 +534,7 @@ h1 {
   background: #0c1f3d;
   border: 2px solid #2a5f9e;
   box-shadow: inset 0 0 0 2px #07142a;
-  padding: 0.65rem;
+  padding: 0.45rem;
   height: 100%;
 }
 
@@ -547,17 +547,17 @@ h1 {
 
 .spark-head span {
   color: #9fcaef;
-  font-size: 0.88rem;
+  font-size: 0.78rem;
 }
 
 .spark-head strong {
   color: #d7f1ff;
-  font-size: 1.04rem;
+  font-size: 0.92rem;
 }
 
 .spark-svg {
   width: 100%;
-  height: 82px;
+  height: 64px;
   border: 1px solid #1a4a80;
   background:
     linear-gradient(to bottom, rgba(180, 225, 255, 0.05) 1px, transparent 1px),
@@ -578,7 +578,7 @@ h1 {
 .spark-axis-note {
   margin: 0.2rem 0 0;
   color: #8fb5d8;
-  font-size: 0.82rem;
+  font-size: 0.74rem;
 }
 
 .model-metrics-grid {
@@ -593,13 +593,13 @@ h1 {
   background: #0c203e;
   border: 2px solid #2a5f9e;
   box-shadow: inset 0 0 0 2px #07142a;
-  padding: 0.62rem;
+  padding: 0.45rem;
   height: 100%;
 }
 
 .model-metric-card h3 {
-  margin: 0 0 0.45rem;
-  font-size: 0.98rem;
+  margin: 0 0 0.35rem;
+  font-size: 0.86rem;
   color: #9fd4ff;
   letter-spacing: 0.07em;
 }
@@ -613,13 +613,13 @@ h1 {
 
 .metric-row span,
 .metric-row strong {
-  font-size: 0.88rem;
+  font-size: 0.78rem;
   color: #c8e8ff;
 }
 
 .bar-track {
   margin-top: 0.18rem;
-  height: 8px;
+  height: 6px;
   border: 1px solid #1b426f;
   background: #09172d;
 }

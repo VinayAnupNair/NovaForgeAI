@@ -279,8 +279,8 @@ function App() {
   const reputationTrend = history.map((h) => h.reputation);
   const complianceTrend = history.map((h) => h.compliance);
   const pressureTrend = history.map((h) => h.competitive_pressure * 10);
+  const rivalValuationTrend = history.map((h) => (h.rival_valuation ?? 0) / 1_000_000);
   const leaderboard = game.leaderboard || [];
-  const rivalActions = game.rival_actions_last_quarter || [];
   const rivalStatus = game.rival_status || "not-run";
   const finalStats = game.final_stats;
   const epilogue = game.epilogue;
@@ -405,16 +405,14 @@ function App() {
 
           <article className="leaderboard-card">
             <h3>LEADERBOARD (YOU VS RIVAL)</h3>
-            <p className="leaderboard-note">Powered by backend rival decisions each quarter.</p>
+            <p className="leaderboard-note">Ranked by valuation.</p>
             <p className="leaderboard-note">Rival status: {rivalStatus.toUpperCase()}</p>
             <table>
               <thead>
                 <tr>
                   <th>RANK</th>
                   <th>TEAM</th>
-                  <th>SCORE</th>
                   <th>VALUATION</th>
-                  <th>COMP</th>
                 </tr>
               </thead>
               <tbody>
@@ -422,27 +420,11 @@ function App() {
                   <tr key={entry.name} className={entry.isPlayer ? "player-row" : "rival-row"}>
                     <td>#{entry.rank || index + 1}</td>
                     <td>{entry.isPlayer ? `${entry.name} (YOU)` : entry.name}</td>
-                    <td>{entry.score.toFixed(1)}</td>
                     <td>{formatCompactMoney(entry.valuation)}</td>
-                    <td>{entry.compliance.toFixed(1)}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
-            <div className="rival-action-feed">
-              <p>Rival Moves:</p>
-              {rivalActions.length ? (
-                <ul>
-                  {rivalActions.map((action, idx) => (
-                    <li key={`${action.action_type}-${idx}`}>
-                      {action.action_type.replaceAll("_", " ").toUpperCase()} ({action.strength.toFixed(2)}): {action.explanation}
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <span>No rival pressure applied yet.</span>
-              )}
-            </div>
           </article>
         </section>
 
@@ -452,6 +434,7 @@ function App() {
           <Sparkline values={reputationTrend} color="#6dffce" title="REPUTATION" />
           <Sparkline values={complianceTrend} color="#73b7ff" title="COMPLIANCE" />
           <Sparkline values={pressureTrend} color="#ffab8f" title="COMPETITIVE PRESSURE x10" />
+          <Sparkline values={rivalValuationTrend} color="#ff7fc8" title="RIVAL VALUATION (M)" />
         </section>
 
         <section className="model-metrics-grid panel-model-metrics">
@@ -471,13 +454,6 @@ function App() {
               </div>
               <div className="bar-track">
                 <div className="bar-fill bar-reliability" style={{ width: `${clamp(metric.reliability, 0, 100)}%` }} />
-              </div>
-              <div className="metric-row">
-                <span>Balance</span>
-                <strong>{metric.balance.toFixed(1)}</strong>
-              </div>
-              <div className="bar-track">
-                <div className="bar-fill bar-balance" style={{ width: `${clamp(metric.balance, 0, 100)}%` }} />
               </div>
               <div className="metric-row">
                 <span>Risk</span>

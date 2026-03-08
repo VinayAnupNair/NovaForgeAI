@@ -296,6 +296,7 @@ class GameService:
                     incidents=incidents,
                     score=0.0,
                     competitive_pressure=round(competitive_pressure, 3),
+                    rival_valuation=session.rival_state.valuation,
                 )
             )
             session.pending_round = None
@@ -341,6 +342,7 @@ class GameService:
                 incidents=incidents,
                 score=score,
                 competitive_pressure=round(competitive_pressure, 3),
+                rival_valuation=session.rival_state.valuation,
             )
         )
 
@@ -692,7 +694,8 @@ class GameService:
             ),
         ]
 
-        entries.sort(key=lambda entry: entry.score, reverse=True)
+        # Leaderboard now prioritizes valuation over composite score.
+        entries.sort(key=lambda entry: entry.valuation, reverse=True)
         for idx, entry in enumerate(entries, start=1):
             entry.rank = idx
         return entries
