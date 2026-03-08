@@ -199,3 +199,4 @@ class GameSession:
     rival_state: RivalState = field(default_factory=RivalState)
     rival_actions_last_quarter: List[RivalAction] = field(default_factory=list)
     leaderboard: List[LeaderboardEntry] = field(default_factory=list)
+    gemini_status: str = "not-run"

@@ -112,7 +112,8 @@ class GameService:
         incidents = int(sum(m["incident"] for m in model_results))
         incident_costs = sum(m["incident_cost"] for m in model_results)
 
-        rival_actions = self.rival_service.choose_actions(state, event)
+        rival_actions, gemini_status = self.rival_service.choose_actions(state, event)
+        session.gemini_status = gemini_status
         session.rival_actions_last_quarter = rival_actions
 
         demand_penalty = 0.0
@@ -237,7 +238,7 @@ class GameService:
             )
 
         session.model_metrics = model_metrics
-        self._update_rival_state(session, total_revenue, demand_penalty + margin_penalty)
+        self._update_rival_state(session, total_revenue, rival_actions)
         session.leaderboard = self._build_leaderboard(session, score_hint=0.0)
 
         # If company health collapses, end the run immediately without a funding round.
@@ -417,6 +418,7 @@ class GameService:
                 RivalActionResponse(**asdict(action)) for action in session.rival_actions_last_quarter
             ],
             leaderboard=[LeaderboardEntryResponse(**asdict(entry)) for entry in session.leaderboard],
+            gemini_status=session.gemini_status,
             challenge_flags=challenge_flags,
             pending_round=pending_round,
         )
@@ -440,13 +442,43 @@ class GameService:
         )
         return max(0.0, min(100.0, score))
 
-    def _update_rival_state(self, session: GameSession, player_revenue: float, pressure_strength: float) -> None:
+    def _update_rival_state(
+        self,
+        session: GameSession,
+        player_revenue: float,
+        rival_actions: list[RivalAction],
+    ) -> None:
         rival = session.rival_state
-        growth_boost = max(0.0, min(0.2, 0.05 + pressure_strength * 0.35))
-        rival.valuation = max(45_000_000, rival.valuation * (1.01 + growth_boost) + player_revenue * 0.055)
-        rival.reputation = max(35.0, min(100.0, rival.reputation + 0.3 + pressure_strength * 2.0))
-        rival.compliance = max(30.0, min(97.0, rival.compliance + random.uniform(-1.1, 0.7)))
-        if random.random() < 0.12 + pressure_strength * 0.18:
+        action_strength = sum(action.strength for action in rival_actions)
+        action_strength = max(0.0, min(1.9, action_strength))
+
+        valuation_growth = 0.006 + action_strength * 0.028
+        rival.valuation = max(45_000_000, rival.valuation * (1 + valuation_growth) + player_revenue * 0.026)
+
+        compliance_shift = 0.0
+        reputation_shift = 0.0
+        incident_risk = 0.09
+
+        for action in rival_actions:
+            if action.action_type == "safety_campaign":
+                compliance_shift += 1.3 * action.strength
+                reputation_shift += 0.8 * action.strength
+                incident_risk -= 0.02 * action.strength
+            elif action.action_type == "price_cut":
+                reputation_shift += 0.35 * action.strength
+                incident_risk += 0.02 * action.strength
+            elif action.action_type == "lock_in":
+                reputation_shift += 0.45 * action.strength
+                incident_risk += 0.015 * action.strength
+            elif action.action_type == "talent_poach":
+                compliance_shift += 0.3 * action.strength
+                incident_risk += 0.03 * action.strength
+
+        rival.reputation = max(35.0, min(100.0, rival.reputation + reputation_shift))
+        rival.compliance = max(30.0, min(97.0, rival.compliance + compliance_shift))
+
+        incident_risk = max(0.03, min(0.32, incident_risk))
+        if random.random() < incident_risk:
             rival.total_incidents += 1
 
     def _build_leaderboard(self, session: GameSession, score_hint: float) -> list[LeaderboardEntry]:

@@ -30,6 +30,14 @@ function formatCompactMoney(value) {
   return `$${Math.round(value)}`;
 }
 
+function moneyValueClass(value) {
+  const digits = Math.abs(Math.round(value || 0)).toString().length;
+  if (digits >= 12) return "metric-value-xs";
+  if (digits >= 11) return "metric-value-sm";
+  if (digits >= 10) return "metric-value-md";
+  return "metric-value-lg";
+}
+
 function scoreClass(score) {
   if (score >= 82) return "score-outstanding";
   if (score >= 68) return "score-strong";
@@ -247,6 +255,7 @@ function App() {
   const pressureTrend = history.map((h) => h.competitive_pressure * 10);
   const leaderboard = game.leaderboard || [];
   const rivalActions = game.rival_actions_last_quarter || [];
+  const geminiStatus = game.gemini_status || "not-run";
 
   return (
     <main className={`shell ${isShutdown ? "danger-mode" : ""} ${isPausedByEvent ? "paused" : ""}`}>
@@ -278,19 +287,19 @@ function App() {
 
       <div className="dashboard-grid">
         <section className="metrics-grid panel-metrics">
-          <article className="metric-card">
+          <article className="metric-card metric-card-primary">
             <label>CASH</label>
-            <h2>{formatMoney(state.cash)}</h2>
+            <h2 className={moneyValueClass(state.cash)}>{formatMoney(state.cash)}</h2>
           </article>
-          <article className="metric-card">
+          <article className="metric-card metric-card-primary">
             <label>VALUATION</label>
-            <h2>{formatMoney(state.valuation)}</h2>
+            <h2 className={moneyValueClass(state.valuation)}>{formatMoney(state.valuation)}</h2>
           </article>
-          <article className={`metric-card ${isReputationLow ? "metric-card-danger" : ""}`}>
+          <article className={`metric-card metric-card-secondary ${isReputationLow ? "metric-card-danger" : ""}`}>
             <label>REPUTATION</label>
             <h2>{state.reputation.toFixed(1)}</h2>
           </article>
-          <article className={`metric-card ${isComplianceLow ? "metric-card-danger" : ""}`}>
+          <article className={`metric-card metric-card-secondary ${isComplianceLow ? "metric-card-danger" : ""}`}>
             <label>COMPLIANCE</label>
             <h2>{state.compliance.toFixed(1)}</h2>
           </article>
@@ -365,6 +374,7 @@ function App() {
           <article className="leaderboard-card">
             <h3>LEADERBOARD (YOU VS GEMINI)</h3>
             <p className="leaderboard-note">Powered by backend Gemini rival decisions each quarter.</p>
+            <p className="leaderboard-note">Gemini status: {geminiStatus.toUpperCase()}</p>
             <table>
               <thead>
                 <tr>

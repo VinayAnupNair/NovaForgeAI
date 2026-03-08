@@ -1,8 +1,7 @@
 import json
 import os
-import random
 from pathlib import Path
-from typing import Dict, List
+from typing import List, Tuple
 from urllib import error, request
 
 from app.domain.models import CompanyState, RivalAction, RivalActionType, WorldEvent
@@ -38,10 +37,11 @@ class GeminiRivalService:
                 return value.strip().strip("\"'")
         return None
 
-    def choose_actions(self, state: CompanyState, event: WorldEvent) -> List[RivalAction]:
-        fallback = self._fallback_actions(state, event)
+    def choose_actions(self, state: CompanyState, event: WorldEvent) -> Tuple[List[RivalAction], str]:
+        # Reload key each call so .env.local edits work immediately.
+        self.api_key = self._load_api_key()
         if not self.api_key:
-            return fallback
+            return [], "missing-api-key"
 
         payload = {
             "contents": [
@@ -82,9 +82,11 @@ class GeminiRivalService:
                 .get("text", "")
             )
             actions = self._parse_actions(candidate_text)
-            return actions if actions else fallback
+            if actions:
+                return actions, "gemini-live"
+            return [], "gemini-empty-response"
         except (TimeoutError, error.URLError, error.HTTPError, json.JSONDecodeError):
-            return fallback
+            return [], "gemini-call-failed"
 
     def _build_prompt(self, state: CompanyState, event: WorldEvent) -> str:
         return (
@@ -128,65 +130,3 @@ class GeminiRivalService:
                 )
             )
         return parsed
-
-    def _fallback_actions(self, state: CompanyState, event: WorldEvent) -> List[RivalAction]:
-        actions: List[RivalAction] = []
-
-        if event.key == "oss_rival_free_model":
-            actions.append(
-                RivalAction(
-                    action_type="price_cut",
-                    strength=0.78,
-                    explanation="Gemini slashes enterprise pricing to undercut paid alternatives.",
-                )
-            )
-            actions.append(
-                RivalAction(
-                    action_type="lock_in",
-                    strength=0.52,
-                    explanation="Gemini bundles long-term contracts with platform credits.",
-                )
-            )
-        elif event.key == "eu_explainability_audit":
-            actions.append(
-                RivalAction(
-                    action_type="safety_campaign",
-                    strength=0.7,
-                    explanation="Gemini launches compliance campaign to win regulated buyers.",
-                )
-            )
-        elif event.key == "gpu_prices_spike":
-            actions.append(
-                RivalAction(
-                    action_type="talent_poach",
-                    strength=0.58,
-                    explanation="Gemini poaches infra talent to improve compute efficiency.",
-                )
-            )
-            actions.append(
-                RivalAction(
-                    action_type="price_cut",
-                    strength=0.38,
-                    explanation="Gemini applies selective discounts to absorb cost shock.",
-                )
-            )
-        else:
-            base_strength = 0.45 + random.random() * 0.25
-            if state.compliance < 60:
-                actions.append(
-                    RivalAction(
-                        action_type="safety_campaign",
-                        strength=base_strength,
-                        explanation="Gemini emphasizes trust marketing while rivals face compliance stress.",
-                    )
-                )
-            else:
-                actions.append(
-                    RivalAction(
-                        action_type="lock_in",
-                        strength=base_strength,
-                        explanation="Gemini pushes distribution lock-in through enterprise channels.",
-                    )
-                )
-
-        return actions[:2]

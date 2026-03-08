@@ -109,6 +109,7 @@ class GameSessionResponse(BaseModel):
     model_metrics: List[ModelPerformanceResponse]
     rival_actions_last_quarter: List[RivalActionResponse]
     leaderboard: List[LeaderboardEntryResponse]
+    gemini_status: str
     challenge_flags: List[str]
     pending_round: Optional[PendingRoundResponse] = None
 

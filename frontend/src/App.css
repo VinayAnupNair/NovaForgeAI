@@ -12,10 +12,10 @@
 
 .shell {
   position: relative;
-  width: min(98vw, 1500px);
-  height: calc(100vh - 0.8rem);
-  margin: 0.4rem auto;
-  padding: 0.8rem;
+  width: min(99vw, 1620px);
+  height: calc(100vh - 0.4rem);
+  margin: 0.2rem auto;
+  padding: 0.55rem;
   border: 2px solid var(--line);
   box-shadow: 0 0 0 2px #030c1a, 0 0 0 4px var(--line), 0 24px 50px rgba(0, 0, 0, 0.5);
   background: rgba(3, 10, 22, 0.92);
@@ -95,9 +95,19 @@
 .dashboard-grid {
   display: grid;
   grid-template-columns: 1.6fr 1fr;
-  grid-template-rows: auto 1fr auto;
-  gap: 0.5rem;
-  height: calc(100% - 90px);
+  grid-template-rows: auto minmax(0, 1.15fr) minmax(0, 1fr) auto;
+  gap: 0.18rem;
+  height: calc(100% - 84px);
+}
+
+.panel-metrics,
+.panel-budget,
+.panel-models,
+.panel-analytics,
+.panel-ops,
+.panel-model-metrics,
+.panel-action {
+  min-height: 0;
 }
 
 .panel-metrics {
@@ -140,7 +150,7 @@
   justify-content: space-between;
   gap: 0.7rem;
   align-items: flex-start;
-  margin-bottom: 0.55rem;
+  margin-bottom: 0.3rem;
 }
 
 .title-block {
@@ -155,7 +165,7 @@
 }
 
 .ai-badge {
-  font-size: 0.62rem;
+  font-size: 0.78rem;
   letter-spacing: 0.1em;
   color: #0f1118;
   background: var(--accent);
@@ -173,7 +183,7 @@
 .kicker {
   margin: 0;
   color: var(--text-dim);
-  font-size: 0.65rem;
+  font-size: 0.9rem;
   letter-spacing: 0.1em;
 }
 
@@ -181,7 +191,7 @@ h1 {
   margin: 0;
   font-family: "Press Start 2P", monospace;
   color: var(--text-main);
-  font-size: clamp(0.95rem, 1.8vw, 1.45rem);
+  font-size: clamp(1.18rem, 2.35vw, 1.88rem);
   line-height: 1.35;
   display: flex;
   align-items: center;
@@ -192,7 +202,7 @@ h1 {
 .subtitle {
   margin: 0;
   color: var(--text-dim);
-  font-size: 0.82rem;
+  font-size: 1.06rem;
   letter-spacing: 0.06em;
 }
 
@@ -224,8 +234,8 @@ h1 {
 
 .metrics-grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 0.45rem;
+  grid-template-columns: 1.8fr 1.8fr 1fr 1fr;
+  gap: 0.18rem;
 }
 
 .metric-card,
@@ -241,12 +251,53 @@ h1 {
 }
 
 .metric-card {
-  padding: 0.58rem;
+  padding: 0.62rem;
+  height: 100%;
+}
+
+.metric-card-primary {
+  padding: 0.8rem;
+}
+
+.metric-card-primary label {
+  font-size: 1.02rem;
+}
+
+.metric-card-primary h2 {
+  font-size: clamp(2.5rem, 3.8vw, 3.3rem);
+}
+
+.metric-card h2.metric-value-lg {
+  font-size: clamp(2.5rem, 3.8vw, 3.3rem);
+}
+
+.metric-card h2.metric-value-md {
+  font-size: clamp(2.2rem, 3.4vw, 2.95rem);
+}
+
+.metric-card h2.metric-value-sm {
+  font-size: clamp(1.95rem, 3vw, 2.55rem);
+}
+
+.metric-card h2.metric-value-xs {
+  font-size: clamp(1.72rem, 2.6vw, 2.2rem);
+}
+
+.metric-card-secondary {
+  padding: 0.45rem;
+}
+
+.metric-card-secondary label {
+  font-size: 0.78rem;
+}
+
+.metric-card-secondary h2 {
+  font-size: clamp(1.55rem, 2.2vw, 2rem);
 }
 
 .metric-card label {
   display: block;
-  font-size: 0.65rem;
+  font-size: 0.92rem;
   color: var(--text-dim);
   letter-spacing: 0.09em;
 }
@@ -255,7 +306,7 @@ h1 {
   margin: 0.28rem 0 0;
   font-family: "VT323", monospace;
   color: var(--text-main);
-  font-size: clamp(1.75rem, 2.8vw, 2.25rem);
+  font-size: clamp(2.2rem, 3.5vw, 2.9rem);
 }
 
 .metric-card-danger {
@@ -271,14 +322,15 @@ h1 {
 
 .budget-card {
   margin-top: 0;
-  padding: 0.58rem;
+  padding: 0.66rem;
+  height: 100%;
 }
 
 .budget-line {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  font-size: 0.72rem;
+  font-size: 1.02rem;
   color: var(--text-main);
 }
 
@@ -305,23 +357,24 @@ h1 {
 .budget-card p {
   margin: 0;
   color: var(--text-dim);
-  font-size: 0.7rem;
+  font-size: 1rem;
 }
 
 .models-grid {
   margin-top: 0;
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 0.45rem;
+  gap: 0.18rem;
 }
 
 .model-card {
-  padding: 0.56rem;
+  padding: 0.62rem;
+  height: 100%;
 }
 
 .model-card h3 {
   margin: 0 0 0.2rem;
-  font-size: 0.78rem;
+  font-size: 1.04rem;
   color: var(--accent);
   letter-spacing: 0.08em;
 }
@@ -329,7 +382,7 @@ h1 {
 .model-levels,
 .model-age {
   margin: 0;
-  font-size: 0.68rem;
+  font-size: 0.92rem;
   color: var(--text-dim);
 }
 
@@ -360,12 +413,17 @@ h1 {
 .ops-grid {
   display: grid;
   grid-template-columns: 1fr 1fr 1.3fr;
-  gap: 0.45rem;
+  gap: 0.18rem;
+  height: 100%;
+}
+
+.ops-grid > article {
+  height: 100%;
 }
 
 .warnings-card h3 {
   margin: 0 0 0.5rem;
-  font-size: 0.72rem;
+  font-size: 0.96rem;
   color: #ffd5df;
   letter-spacing: 0.08em;
 }
@@ -379,7 +437,7 @@ h1 {
 
 .warnings-card li {
   color: #ffbecf;
-  font-size: 0.68rem;
+  font-size: 0.9rem;
 }
 
 .leaderboard-card {
@@ -392,21 +450,21 @@ h1 {
 
 .leaderboard-card h3 {
   margin: 0;
-  font-size: 0.72rem;
+  font-size: 0.96rem;
   color: #b0d5ff;
   letter-spacing: 0.08em;
 }
 
 .leaderboard-note {
   margin: 0.25rem 0 0.35rem;
-  font-size: 0.62rem;
+  font-size: 0.86rem;
   color: #9dc0e5;
 }
 
 .leaderboard-card table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 0.62rem;
+  font-size: 0.9rem;
 }
 
 .leaderboard-card th,
@@ -420,7 +478,7 @@ h1 {
 .leaderboard-card th {
   color: #8eb6e1;
   border-top: none;
-  font-size: 0.58rem;
+  font-size: 0.82rem;
   letter-spacing: 0.05em;
 }
 
@@ -443,12 +501,12 @@ h1 {
 .rival-action-feed p {
   margin: 0;
   color: #9ec6eb;
-  font-size: 0.58rem;
+  font-size: 0.84rem;
 }
 
 .rival-action-feed span {
   color: #9ac0e6;
-  font-size: 0.58rem;
+  font-size: 0.84rem;
 }
 
 .rival-action-feed ul {
@@ -460,7 +518,7 @@ h1 {
 
 .rival-action-feed li {
   color: #c9e7ff;
-  font-size: 0.56rem;
+  font-size: 0.82rem;
   line-height: 1.3;
 }
 
@@ -468,14 +526,16 @@ h1 {
   margin-top: 0;
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0.45rem;
+  gap: 0.18rem;
+  height: 100%;
 }
 
 .spark-card {
   background: #0c1f3d;
   border: 2px solid #2a5f9e;
   box-shadow: inset 0 0 0 2px #07142a;
-  padding: 0.55rem;
+  padding: 0.65rem;
+  height: 100%;
 }
 
 .spark-head {
@@ -487,17 +547,17 @@ h1 {
 
 .spark-head span {
   color: #9fcaef;
-  font-size: 0.62rem;
+  font-size: 0.88rem;
 }
 
 .spark-head strong {
   color: #d7f1ff;
-  font-size: 0.72rem;
+  font-size: 1.04rem;
 }
 
 .spark-svg {
   width: 100%;
-  height: 72px;
+  height: 82px;
   border: 1px solid #1a4a80;
   background:
     linear-gradient(to bottom, rgba(180, 225, 255, 0.05) 1px, transparent 1px),
@@ -512,32 +572,34 @@ h1 {
 
 .spark-axis-text {
   fill: #96bde4;
-  font-size: 7px;
+  font-size: 8px;
 }
 
 .spark-axis-note {
   margin: 0.2rem 0 0;
   color: #8fb5d8;
-  font-size: 0.58rem;
+  font-size: 0.82rem;
 }
 
 .model-metrics-grid {
   margin-top: 0;
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 0.45rem;
+  gap: 0.18rem;
+  height: 100%;
 }
 
 .model-metric-card {
   background: #0c203e;
   border: 2px solid #2a5f9e;
   box-shadow: inset 0 0 0 2px #07142a;
-  padding: 0.52rem;
+  padding: 0.62rem;
+  height: 100%;
 }
 
 .model-metric-card h3 {
   margin: 0 0 0.45rem;
-  font-size: 0.72rem;
+  font-size: 0.98rem;
   color: #9fd4ff;
   letter-spacing: 0.07em;
 }
@@ -551,7 +613,7 @@ h1 {
 
 .metric-row span,
 .metric-row strong {
-  font-size: 0.64rem;
+  font-size: 0.88rem;
   color: #c8e8ff;
 }
 
@@ -584,7 +646,7 @@ h1 {
 
 .log-card h3 {
   margin: 0 0 0.5rem;
-  font-size: 0.72rem;
+  font-size: 0.98rem;
   color: var(--accent);
   letter-spacing: 0.08em;
 }
@@ -593,7 +655,7 @@ h1 {
 .log-card li {
   margin: 0;
   color: var(--text-dim);
-  font-size: 0.68rem;
+  font-size: 0.92rem;
 }
 
 .log-card ul {
@@ -621,14 +683,14 @@ h1 {
 
 .shutdown-card h3 {
   margin: 0 0 0.5rem;
-  font-size: 0.86rem;
+  font-size: 1rem;
   color: #ffd2dc;
   letter-spacing: 0.08em;
 }
 
 .shutdown-card p {
   margin: 0 0 0.5rem;
-  font-size: 0.72rem;
+  font-size: 0.86rem;
   color: #ffc1d1;
 }
 
@@ -645,7 +707,7 @@ h1 {
 
 .report-card h3 {
   margin: 0 0 0.48rem;
-  font-size: 0.78rem;
+  font-size: 1.02rem;
   letter-spacing: 0.08em;
   color: var(--accent);
 }
@@ -659,7 +721,7 @@ h1 {
 .report-grid p {
   margin: 0;
   color: var(--text-dim);
-  font-size: 0.7rem;
+  font-size: 0.94rem;
 }
 
 .report-grid strong {
@@ -668,7 +730,7 @@ h1 {
 
 .funding-offer {
   margin: 0.42rem 0;
-  font-size: 0.72rem;
+  font-size: 0.96rem;
   color: var(--text-main);
 }
 
@@ -682,10 +744,10 @@ h1 {
   background: #0a223f;
   color: var(--text-main);
   font-family: "Press Start 2P", monospace;
-  font-size: 0.62rem;
+  font-size: 0.82rem;
   letter-spacing: 0.04em;
-  line-height: 1.45;
-  padding: 0.48rem 0.42rem;
+  line-height: 1.46;
+  padding: 0.6rem 0.54rem;
   cursor: pointer;
   transition: transform 80ms steps(2, end), filter 120ms linear;
   box-shadow: 2px 2px 0 #021022;
@@ -723,18 +785,18 @@ h1 {
 }
 
 .upgrade-label {
-  font-size: 0.56rem;
+  font-size: 0.74rem;
 }
 
 .upgrade-cost {
-  font-size: 0.52rem;
+  font-size: 0.68rem;
   color: #8dd2ff;
   letter-spacing: 0.02em;
 }
 
 .loading-panel {
   padding: 1rem;
-  font-size: 0.72rem;
+  font-size: 1rem;
   color: var(--text-main);
   display: grid;
   gap: 0.55rem;
@@ -746,7 +808,7 @@ h1 {
   border-color: #a23c5a;
   background: #3c1220;
   color: #ffd6e1;
-  font-size: 0.72rem;
+  font-size: 0.96rem;
 }
 
 .score-outstanding,
@@ -797,21 +859,21 @@ h1 {
 
 .event-kicker {
   margin: 0;
-  font-size: 0.7rem;
+  font-size: 0.82rem;
   color: #ffc7d6;
   letter-spacing: 0.1em;
 }
 
 .event-modal h2 {
   margin: 0.45rem 0 0;
-  font-size: 1.05rem;
+  font-size: 1.22rem;
   color: #ffe4bc;
   letter-spacing: 0.04em;
 }
 
 .event-modal p {
   margin: 0.45rem 0 0;
-  font-size: 0.86rem;
+  font-size: 0.98rem;
   color: #ffd2da;
   line-height: 1.4;
 }
@@ -844,14 +906,14 @@ h1 {
 
 .shutdown-modal h2 {
   margin: 0.45rem 0 0;
-  font-size: 1.08rem;
+  font-size: 1.25rem;
   color: #ffdbe6;
   letter-spacing: 0.05em;
 }
 
 .shutdown-modal p {
   margin: 0.45rem 0 0;
-  font-size: 0.84rem;
+  font-size: 0.98rem;
   color: #ffd2db;
   line-height: 1.4;
 }
