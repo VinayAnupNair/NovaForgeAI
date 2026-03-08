@@ -43,6 +43,12 @@ pnpm-debug.log*
 !.env.example
 
 # -----------------------------
+# User data / runtime storage
+# -----------------------------
+data/
+*.jsonl
+
+# -----------------------------
 # Editor / OS noise
 # -----------------------------
 .DS_Store

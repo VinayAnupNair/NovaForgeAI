@@ -146,3 +146,17 @@ class GameSessionResponse(BaseModel):
 class RootResponse(BaseModel):
     message: str
     docs: str
+
+
+class RunHistoryItemResponse(BaseModel):
+    finished_at: str
+    company_name: str
+    valuation: float
+    reputation: float
+    compliance: float
+    score: float
+    status: str
+
+
+class RunHistoryResponse(BaseModel):
+    items: List[RunHistoryItemResponse]

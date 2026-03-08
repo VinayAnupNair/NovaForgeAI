@@ -1,4 +1,5 @@
 from dataclasses import asdict
+from datetime import datetime, timezone
 import random
 from uuid import uuid4
 
@@ -40,20 +41,22 @@ from app.schemas.responses import (
 from app.services.epilogue_service import EpilogueService
 from app.services.rival_service import RivalService
 from app.storage.memory_store import MemoryGameStore
+from app.storage.run_history_store import RunHistoryStore
 
 
 class GameService:
-    def __init__(self, store: MemoryGameStore) -> None:
+    def __init__(self, store: MemoryGameStore, run_history_store: RunHistoryStore | None = None) -> None:
         self.store = store
         self.rival_service = RivalService()
         self.epilogue_service = EpilogueService()
+        self.run_history_store = run_history_store or RunHistoryStore()
 
     def _session_status(self, session: GameSession) -> str:
         if session.game_completed:
             return "completed"
         return state_status(session.state)
 
-    def create_game(self, request: NewGameRequest) -> GameSessionResponse:
+    def create_game(self, username: str, request: NewGameRequest) -> GameSessionResponse:
         trait_pool = ["aggressive", "conservative", "ops-heavy", "consumer-friendly"]
         random.shuffle(trait_pool)
         state = CompanyState(
@@ -66,17 +69,20 @@ class GameService:
         )
 
         game_id = str(uuid4())
-        self.store.create(game_id, GameSession(state=state))
-        session = self.get_session(game_id)
+        self.store.create(username, game_id, GameSession(state=state))
+        session = self.get_session(username, game_id)
         session.leaderboard = self._build_leaderboard(session, score_hint=0.0)
         return self.serialize_session(game_id, session)
 
-    def get_game(self, game_id: str) -> GameSessionResponse:
-        session = self.get_session(game_id)
+    def get_game(self, username: str, game_id: str) -> GameSessionResponse:
+        session = self.get_session(username, game_id)
         return self.serialize_session(game_id, session)
 
-    def generate_epilogue(self, game_id: str) -> GameSessionResponse:
-        session = self.get_session(game_id)
+    def get_history(self, username: str, limit: int = 15) -> list[dict]:
+        return self.run_history_store.latest_runs(username, limit=limit)
+
+    def generate_epilogue(self, username: str, game_id: str) -> GameSessionResponse:
+        session = self.get_session(username, game_id)
         if not session.game_completed:
             raise HTTPException(status_code=400, detail="Epilogue is only available after run completion")
         if session.final_stats is None:
@@ -89,8 +95,8 @@ class GameService:
             )
         return self.serialize_session(game_id, session)
 
-    def apply_upgrades(self, game_id: str, request: ApplyUpgradesRequest) -> GameSessionResponse:
-        session = self.get_session(game_id)
+    def apply_upgrades(self, username: str, game_id: str, request: ApplyUpgradesRequest) -> GameSessionResponse:
+        session = self.get_session(username, game_id)
 
         if session.pending_round:
             raise HTTPException(status_code=400, detail="Resolve funding decision before more upgrades")
@@ -117,8 +123,8 @@ class GameService:
 
         return self.serialize_session(game_id, session)
 
-    def run_quarter(self, game_id: str) -> GameSessionResponse:
-        session = self.get_session(game_id)
+    def run_quarter(self, username: str, game_id: str) -> GameSessionResponse:
+        session = self.get_session(username, game_id)
         state = session.state
 
         if session.pending_round:
@@ -284,6 +290,7 @@ class GameService:
 
         # If company health collapses, end the run immediately without a funding round.
         if state_status(state) != "active":
+            player_score = next((entry.score for entry in session.leaderboard if entry.is_player), 0.0)
             session.history.append(
                 QuarterHistoryPoint(
                     tick=len(session.history) + 1,
@@ -298,6 +305,12 @@ class GameService:
                     competitive_pressure=round(competitive_pressure, 3),
                     rival_valuation=session.rival_state.valuation,
                 )
+            )
+            self._record_run(
+                username,
+                state=state,
+                score=player_score,
+                status="shutdown",
             )
             session.pending_round = None
             return self.serialize_session(game_id, session)
@@ -375,6 +388,12 @@ class GameService:
             )
             session.epilogue = None
             session.game_completed = True
+            self._record_run(
+                username,
+                state=state,
+                score=score,
+                status="completed",
+            )
             session.pending_round = None
             return self.serialize_session(game_id, session)
 
@@ -382,8 +401,8 @@ class GameService:
 
         return self.serialize_session(game_id, session)
 
-    def decide_funding(self, game_id: str, request: FundingDecisionRequest) -> GameSessionResponse:
-        session = self.get_session(game_id)
+    def decide_funding(self, username: str, game_id: str, request: FundingDecisionRequest) -> GameSessionResponse:
+        session = self.get_session(username, game_id)
         state = session.state
 
         if session.game_completed:
@@ -412,8 +431,8 @@ class GameService:
 
         return self.serialize_session(game_id, session)
 
-    def get_session(self, game_id: str) -> GameSession:
-        session = self.store.get(game_id)
+    def get_session(self, username: str, game_id: str) -> GameSession:
+        session = self.store.get(username, game_id)
         if not session:
             raise HTTPException(status_code=404, detail="Game session not found")
         return session
@@ -699,3 +718,15 @@ class GameService:
         for idx, entry in enumerate(entries, start=1):
             entry.rank = idx
         return entries
+
+    def _record_run(self, username: str, *, state: CompanyState, score: float, status: str) -> None:
+        self.run_history_store.record_run(
+            username,
+            finished_at=datetime.now(timezone.utc).isoformat(),
+            company_name=state.name,
+            valuation=state.valuation,
+            reputation=state.reputation,
+            compliance=state.compliance,
+            score=score,
+            status=status,
+        )

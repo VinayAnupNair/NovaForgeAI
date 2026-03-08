@@ -103,6 +103,7 @@ function Sparkline({ values, color, title }) {
 async function fetchJson(url, options = {}) {
   const response = await fetch(url, {
     headers: { "Content-Type": "application/json" },
+    credentials: "include",  // Include cookies
     ...options,
   });
 
@@ -121,18 +122,78 @@ async function fetchJson(url, options = {}) {
 }
 
 function App() {
+  const [user, setUser] = useState(null);
+  const [authLoading, setAuthLoading] = useState(true);
+  const [showAuthUI, setShowAuthUI] = useState(false);
+  const [authMode, setAuthMode] = useState("login");  // "login" or "register"
+  const [authUsername, setAuthUsername] = useState("");
+  const [authPassword, setAuthPassword] = useState("");
   const [game, setGame] = useState(null);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
   const [error, setError] = useState("");
   const [eventModalOpen, setEventModalOpen] = useState(false);
   const [seenEventKey, setSeenEventKey] = useState(null);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyItems, setHistoryItems] = useState([]);
   const [epilogueLoading, setEpilogueLoading] = useState(false);
   const [epilogueRequestedForGame, setEpilogueRequestedForGame] = useState(null);
 
   useEffect(() => {
-    void createGame();
+    void checkAuth();
   }, []);
+
+  async function checkAuth() {
+    try {
+      setAuthLoading(true);
+      const data = await fetchJson(`${API_BASE}/auth/me`);
+      setUser(data);
+      setShowAuthUI(false);
+      void createGame();
+    } catch (err) {
+      setUser(null);
+      setShowAuthUI(true);
+      setLoading(false);
+    } finally {
+      setAuthLoading(false);
+    }
+  }
+
+  async function handleAuth(e) {
+    e.preventDefault();
+    if (!authUsername || !authPassword) {
+      setError("Username and password required");
+      return;
+    }
+    try {
+      setActionLoading(true);
+      setError("");
+      const endpoint = authMode === "login" ? "/auth/login" : "/auth/register";
+      await fetchJson(`${API_BASE}${endpoint}`, {
+        method: "POST",
+        body: JSON.stringify({ username: authUsername, password: authPassword }),
+      });
+      setAuthUsername("");
+      setAuthPassword("");
+      await checkAuth();
+    } catch (err) {
+      setError(err.message || "Authentication failed");
+    } finally {
+      setActionLoading(false);
+    }
+  }
+
+  async function handleLogout() {
+    try {
+      await fetchJson(`${API_BASE}/auth/logout`, { method: "POST" });
+      setUser(null);
+      setGame(null);
+      setShowAuthUI(true);
+    } catch (err) {
+      setError(err.message || "Logout failed");
+    }
+  }
 
   async function createGame() {
     try {
@@ -220,6 +281,21 @@ function App() {
     }
   }
 
+  async function openHistory() {
+    try {
+      setHistoryOpen(true);
+      setHistoryLoading(true);
+      setError("");
+      const data = await fetchJson(`${API_BASE}/history?limit=15`);
+      setHistoryItems(data.items || []);
+    } catch (err) {
+      setError(err.message || "Failed to load history");
+      setHistoryItems([]);
+    } finally {
+      setHistoryLoading(false);
+    }
+  }
+
   const budgetUsedRatio = useMemo(() => {
     if (!game?.budget?.cap) return 0;
     return Math.min(100, Math.round((game.budget.spent / game.budget.cap) * 100));
@@ -240,6 +316,59 @@ function App() {
     setEpilogueRequestedForGame(game.game_id);
     void requestEpilogue(game.game_id);
   }, [game, epilogueRequestedForGame]);
+
+  if (authLoading) {
+    return (
+      <main className="shell">
+        <div className="loading-panel">AUTHENTICATING...</div>
+      </main>
+    );
+  }
+
+  if (showAuthUI) {
+    return (
+      <main className="shell">
+        <div className="auth-panel">
+          <h1>NOVAFORGE AI</h1>
+          <p className="auth-subtitle">
+            {authMode === "login" ? "LOGIN TO CONTINUE" : "CREATE NEW ACCOUNT"}
+          </p>
+          {error ? <div className="error-banner">{error}</div> : null}
+          <form className="auth-form" onSubmit={handleAuth}>
+            <input
+              type="text"
+              placeholder="USERNAME"
+              value={authUsername}
+              onChange={(e) => setAuthUsername(e.target.value)}
+              className="auth-input"
+              disabled={actionLoading}
+            />
+            <input
+              type="password"
+              placeholder="PASSWORD"
+              value={authPassword}
+              onChange={(e) => setAuthPassword(e.target.value)}
+              className="auth-input"
+              disabled={actionLoading}
+            />
+            <button type="submit" className="btn primary" disabled={actionLoading}>
+              {actionLoading ? "PROCESSING..." : authMode === "login" ? "LOGIN" : "REGISTER"}
+            </button>
+          </form>
+          <button
+            className="btn ghost auth-toggle"
+            onClick={() => {
+              setAuthMode(authMode === "login" ? "register" : "login");
+              setError("");
+            }}
+            disabled={actionLoading}
+          >
+            {authMode === "login" ? "CREATE ACCOUNT" : "BACK TO LOGIN"}
+          </button>
+        </div>
+      </main>
+    );
+  }
 
   if (loading) {
     return (
@@ -306,12 +435,23 @@ function App() {
           </p>
         </div>
         <div className="title-controls">
+          <div className="user-info">
+            <span className="user-badge">USER: {user?.username?.toUpperCase() || "GUEST"}</span>
+            <button className="btn ghost btn-sm" onClick={() => void handleLogout()} disabled={actionLoading}>
+              LOGOUT
+            </button>
+          </div>
           <div className={`ai-badge ${isShutdown ? "danger" : ""}`}>
             {isShutdown ? "AI CORE OFFLINE" : "AI CORE ONLINE"}
           </div>
-          <button className="btn ghost" onClick={() => void createGame()} disabled={actionLoading || isPausedByOverlay}>
-            NEW RUN
-          </button>
+          <div className="title-actions">
+            <button className="btn ghost" onClick={() => void openHistory()} disabled={actionLoading}>
+              HISTORY
+            </button>
+            <button className="btn ghost" onClick={() => void createGame()} disabled={actionLoading || isPausedByOverlay}>
+              NEW RUN
+            </button>
+          </div>
         </div>
       </header>
 
@@ -578,6 +718,51 @@ function App() {
             <button className="btn primary" onClick={() => void createGame()} disabled={actionLoading}>
               START NEW RUN
             </button>
+          </article>
+        </div>
+      ) : null}
+
+      {historyOpen ? (
+        <div className="history-modal-backdrop" role="dialog" aria-modal="true" aria-label="Run history">
+          <article className="history-modal">
+            <div className="history-modal-head">
+              <h2>RUN HISTORY</h2>
+              <button className="btn ghost" onClick={() => setHistoryOpen(false)}>
+                CLOSE
+              </button>
+            </div>
+            {historyLoading ? (
+              <p className="history-empty">Loading history...</p>
+            ) : historyItems.length === 0 ? (
+              <p className="history-empty">No past runs yet.</p>
+            ) : (
+              <div className="history-table-wrap">
+                <table className="history-table">
+                  <thead>
+                    <tr>
+                      <th>Date</th>
+                      <th>Company</th>
+                      <th>Valuation</th>
+                      <th>Reputation</th>
+                      <th>Compliance</th>
+                      <th>Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {historyItems.map((item, idx) => (
+                      <tr key={`${item.finished_at}-${idx}`}>
+                        <td>{new Date(item.finished_at).toLocaleString()}</td>
+                        <td>{item.company_name}</td>
+                        <td>{formatCompactMoney(item.valuation)}</td>
+                        <td>{Number(item.reputation).toFixed(1)}</td>
+                        <td>{Number(item.compliance).toFixed(1)}</td>
+                        <td>{String(item.status || "").toUpperCase()}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </article>
         </div>
       ) : null}
