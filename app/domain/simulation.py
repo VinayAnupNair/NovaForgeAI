@@ -1,7 +1,7 @@
 import random
 from typing import Dict, List
 
-from app.domain.models import CompanyState, ModelUnit, WorldEvent
+from app.domain.models import CompanyState, ModelUnit, TRAIT_PROFILES, WorldEvent
 
 
 WORLD_EVENTS: List[WorldEvent] = [
@@ -92,9 +92,17 @@ def simulate_model_outcome(model: ModelUnit, state: CompanyState) -> Dict[str, f
     market_pressure = max(0.0, model.market - model.safety)
 
     event = state.active_event
+    trait_profile = TRAIT_PROFILES[model.trait]
+    historical_debt = model.decision_debt
 
     quality = 50 + model.capability * 7.0 + model.market * 2.6 - stability_bias * 1.4
-    reliability = 46 + model.safety * 8.1 + model.efficiency * 2.4 - capability_pressure * 3.8
+    reliability = (
+        46
+        + model.safety * 8.1
+        + model.efficiency * 2.4
+        - capability_pressure * 3.8
+        - historical_debt * 2.3
+    )
     demand = (
         30
         + model.market * 9.0
@@ -102,6 +110,19 @@ def simulate_model_outcome(model: ModelUnit, state: CompanyState) -> Dict[str, f
         - stability_bias * 1.2
         + random.uniform(-5, 6)
     )
+    burst_prob = clamp(
+        0.08
+        + model.market * 0.012
+        + trait_profile["growth_burst_bias"]
+        - historical_debt * 0.018,
+        0.02,
+        0.42,
+    )
+    growth_burst = 1.0
+    if random.random() < burst_prob:
+        growth_burst += random.uniform(0.05, 0.18)
+    demand *= growth_burst
+    demand *= clamp(1 - historical_debt * 0.03, 0.72, 1.0)
     demand *= event.demand_multiplier if event else 1.0
 
     adoption_factor = clamp((state.reputation + state.compliance) / 180, 0.45, 1.1)
@@ -134,6 +155,14 @@ def simulate_model_outcome(model: ModelUnit, state: CompanyState) -> Dict[str, f
         0.03,
         0.45,
     )
+    incident_prob = clamp(
+        incident_prob
+        + trait_profile["incident_risk_shift"]
+        + historical_debt * 0.024
+        - model.recovery_momentum * 0.01,
+        0.03,
+        0.62,
+    )
     incident = random.random() < incident_prob
     incident_cost = 0.0
     trust_hit = 0.0
@@ -148,8 +177,31 @@ def simulate_model_outcome(model: ModelUnit, state: CompanyState) -> Dict[str, f
         ) * severity
         if event and event.regulatory_pressure > 0:
             incident_cost *= 1 + event.regulatory_pressure * 0.18
-        trust_hit = random.uniform(1.8, 4.6)
-        compliance_hit = random.uniform(1.0, 3.2)
+        recovery_protection = clamp(
+            1 - model.recovery_momentum * 0.05 * trait_profile["recovery_speed"],
+            0.65,
+            1.0,
+        )
+        trust_hit = random.uniform(1.8, 4.6) * recovery_protection
+        compliance_hit = random.uniform(1.0, 3.2) * recovery_protection
+
+    bad_decision_load = (
+        max(0.0, model.capability - model.safety)
+        + max(0.0, model.market - model.efficiency)
+        + capability_pressure * 0.7
+        + market_pressure * 0.4
+    )
+    debt_added = bad_decision_load * 0.22 * trait_profile["debt_gain_multiplier"]
+    if incident:
+        debt_added += 0.9
+
+    recovery_gain = ((model.safety + model.efficiency) / 2) * 0.045 * trait_profile["recovery_speed"]
+    model.recovery_momentum = clamp(model.recovery_momentum * 0.7 + recovery_gain * 0.3, 0.0, 6.0)
+    model.decision_debt = clamp(
+        model.decision_debt + debt_added - model.recovery_momentum * 0.14,
+        0.0,
+        8.0,
+    )
 
     model.quarters_live += 1
     return {
@@ -165,4 +217,6 @@ def simulate_model_outcome(model: ModelUnit, state: CompanyState) -> Dict[str, f
         "demand": demand,
         "capability_pressure": capability_pressure,
         "stability_bias": stability_bias,
+        "growth_burst": growth_burst,
+        "decision_debt": model.decision_debt,
     }

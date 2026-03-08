@@ -1,4 +1,5 @@
 from dataclasses import asdict
+import random
 from uuid import uuid4
 
 from fastapi import HTTPException
@@ -37,12 +38,14 @@ class GameService:
         self.store = store
 
     def create_game(self, request: NewGameRequest) -> GameSessionResponse:
+        trait_pool = ["aggressive", "conservative", "ops-heavy", "consumer-friendly"]
+        random.shuffle(trait_pool)
         state = CompanyState(
             name=request.company_name,
             models=[
-                ModelUnit(name="Atlas Assist"),
-                ModelUnit(name="Vision Copilot"),
-                ModelUnit(name="Ops Automator"),
+                ModelUnit(name="Atlas Assist", trait=trait_pool[0]),
+                ModelUnit(name="Vision Copilot", trait=trait_pool[1]),
+                ModelUnit(name="Ops Automator", trait=trait_pool[2]),
             ],
         )
 
