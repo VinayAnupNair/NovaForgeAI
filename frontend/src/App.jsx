@@ -83,6 +83,8 @@ function App() {
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
   const [error, setError] = useState("");
+  const [eventModalOpen, setEventModalOpen] = useState(false);
+  const [seenEventKey, setSeenEventKey] = useState(null);
 
   useEffect(() => {
     void createGame();
@@ -92,6 +94,8 @@ function App() {
     try {
       setLoading(true);
       setError("");
+      setEventModalOpen(false);
+      setSeenEventKey(null);
       const data = await fetchJson(`${API_BASE}/games`, {
         method: "POST",
         body: JSON.stringify({ company_name: "NovaForge AI" }),
@@ -105,7 +109,7 @@ function App() {
   }
 
   async function applyUpgrade(modelIndex, upgradeType) {
-    if (!game || actionLoading) return;
+    if (!game || actionLoading || eventModalOpen) return;
     try {
       setActionLoading(true);
       setError("");
@@ -124,7 +128,7 @@ function App() {
   }
 
   async function runQuarter() {
-    if (!game || actionLoading) return;
+    if (!game || actionLoading || eventModalOpen) return;
     try {
       setActionLoading(true);
       setError("");
@@ -140,7 +144,7 @@ function App() {
   }
 
   async function decideFunding(accept) {
-    if (!game || actionLoading) return;
+    if (!game || actionLoading || eventModalOpen) return;
     try {
       setActionLoading(true);
       setError("");
@@ -160,6 +164,15 @@ function App() {
     if (!game?.budget?.cap) return 0;
     return Math.min(100, Math.round((game.budget.spent / game.budget.cap) * 100));
   }, [game]);
+
+  useEffect(() => {
+    const eventKey = game?.state?.active_event?.key;
+    if (!eventKey) return;
+    if (eventKey !== seenEventKey) {
+      setEventModalOpen(true);
+      setSeenEventKey(eventKey);
+    }
+  }, [game, seenEventKey]);
 
   if (loading) {
     return (
@@ -188,6 +201,8 @@ function App() {
   const isGameOver = game.status !== "active";
   const history = game.history || [];
   const modelMetrics = game.model_metrics || [];
+  const activeEvent = state.active_event;
+  const isPausedByEvent = eventModalOpen && !!activeEvent;
 
   const revenueTrend = history.map((h) => h.revenue / 1_000_000);
   const profitTrend = history.map((h) => h.net_profit / 1_000_000);
@@ -196,7 +211,7 @@ function App() {
   const pressureTrend = history.map((h) => h.competitive_pressure * 10);
 
   return (
-    <main className={`shell ${isShutdown ? "danger-mode" : ""}`}>
+    <main className={`shell ${isShutdown ? "danger-mode" : ""} ${isPausedByEvent ? "paused" : ""}`}>
       <div className="ambient-grid" />
       <div className="ambient-glow" />
 
@@ -215,7 +230,7 @@ function App() {
           <div className={`ai-badge ${isShutdown ? "danger" : ""}`}>
             {isShutdown ? "AI CORE OFFLINE" : "AI CORE ONLINE"}
           </div>
-          <button className="btn ghost" onClick={() => void createGame()} disabled={actionLoading}>
+          <button className="btn ghost" onClick={() => void createGame()} disabled={actionLoading || isPausedByEvent}>
             NEW RUN
           </button>
         </div>
@@ -223,181 +238,199 @@ function App() {
 
       {error ? <div className="error-banner">{error}</div> : null}
 
-      <section className="metrics-grid">
-        <article className="metric-card">
-          <label>CASH</label>
-          <h2>{formatMoney(state.cash)}</h2>
-        </article>
-        <article className="metric-card">
-          <label>VALUATION</label>
-          <h2>{formatMoney(state.valuation)}</h2>
-        </article>
-        <article className="metric-card">
-          <label>REPUTATION</label>
-          <h2>{state.reputation.toFixed(1)}</h2>
-        </article>
-        <article className="metric-card">
-          <label>COMPLIANCE</label>
-          <h2>{state.compliance.toFixed(1)}</h2>
-        </article>
-      </section>
-
-      <section className="budget-card">
-        <div className="budget-line">
-          <span>R&D ENERGY BUDGET</span>
-          <strong>
-            {formatMoney(game.budget.spent)} / {formatMoney(game.budget.cap)}
-          </strong>
-        </div>
-        <div className="budget-track">
-          <div className="budget-fill" style={{ width: `${budgetUsedRatio}%` }} />
-        </div>
-        <p>{formatMoney(game.budget.remaining)} REMAINING THIS QUARTER</p>
-      </section>
-
-      <section className="models-grid">
-        {state.models.map((model, modelIndex) => (
-          <article className="model-card" key={model.name}>
-            <h3>{model.name}</h3>
-            <p className="model-levels">
-              CAP {model.capability} · SAF {model.safety} · EFF {model.efficiency} · MKT {model.market}
-            </p>
-            <p className="model-age">LIVE FOR {model.quarters_live} QUARTERS</p>
-            <div className="upgrade-buttons">
-              {UPGRADE_TYPES.map((upgradeType) => (
-                <button
-                  key={upgradeType}
-                  className="btn upgrade"
-                  onClick={() => void applyUpgrade(modelIndex, upgradeType)}
-                  disabled={actionLoading || !!pending || isGameOver}
-                >
-                  + {upgradeType.toUpperCase()}
-                </button>
-              ))}
-            </div>
+      <div className="dashboard-grid">
+        <section className="metrics-grid panel-metrics">
+          <article className="metric-card">
+            <label>CASH</label>
+            <h2>{formatMoney(state.cash)}</h2>
           </article>
-        ))}
-      </section>
-
-      <section className="log-card">
-        <h3>COMMAND LOG</h3>
-        {game.budget.actions.length === 0 ? (
-          <p>NO UPGRADES ISSUED THIS QUARTER.</p>
-        ) : (
-          <ul>
-            {game.budget.actions.slice(-5).map((entry) => (
-              <li key={entry}>{entry.toUpperCase()}</li>
-            ))}
-          </ul>
-        )}
-      </section>
-
-      <section className="warnings-card">
-        <h3>STRATEGY SIGNALS</h3>
-        <ul>
-          {(game.challenge_flags || []).map((flag) => (
-            <li key={flag}>{flag.toUpperCase()}</li>
-          ))}
-        </ul>
-      </section>
-
-      <section className="analytics-grid">
-        <Sparkline values={revenueTrend} color="#61c7ff" title="REVENUE TREND (M)" />
-        <Sparkline values={profitTrend} color="#89deff" title="PROFIT TREND (M)" />
-        <Sparkline values={reputationTrend} color="#6dffce" title="REPUTATION" />
-        <Sparkline values={complianceTrend} color="#73b7ff" title="COMPLIANCE" />
-        <Sparkline values={pressureTrend} color="#ffab8f" title="COMPETITIVE PRESSURE x10" />
-      </section>
-
-      <section className="model-metrics-grid">
-        {modelMetrics.map((metric) => (
-          <article className="model-metric-card" key={metric.name}>
-            <h3>{metric.name}</h3>
-            <div className="metric-row">
-              <span>Performance</span>
-              <strong>{metric.performance.toFixed(1)}</strong>
-            </div>
-            <div className="bar-track">
-              <div className="bar-fill bar-performance" style={{ width: `${clamp(metric.performance, 0, 100)}%` }} />
-            </div>
-            <div className="metric-row">
-              <span>Reliability</span>
-              <strong>{metric.reliability.toFixed(1)}</strong>
-            </div>
-            <div className="bar-track">
-              <div className="bar-fill bar-reliability" style={{ width: `${clamp(metric.reliability, 0, 100)}%` }} />
-            </div>
-            <div className="metric-row">
-              <span>Balance</span>
-              <strong>{metric.balance.toFixed(1)}</strong>
-            </div>
-            <div className="bar-track">
-              <div className="bar-fill bar-balance" style={{ width: `${clamp(metric.balance, 0, 100)}%` }} />
-            </div>
-            <div className="metric-row">
-              <span>Risk</span>
-              <strong>{metric.risk.toFixed(1)}</strong>
-            </div>
-            <div className="bar-track">
-              <div className="bar-fill bar-risk" style={{ width: `${clamp(metric.risk, 0, 100)}%` }} />
-            </div>
+          <article className="metric-card">
+            <label>VALUATION</label>
+            <h2>{formatMoney(state.valuation)}</h2>
           </article>
-        ))}
-      </section>
+          <article className="metric-card">
+            <label>REPUTATION</label>
+            <h2>{state.reputation.toFixed(1)}</h2>
+          </article>
+          <article className="metric-card">
+            <label>COMPLIANCE</label>
+            <h2>{state.compliance.toFixed(1)}</h2>
+          </article>
+        </section>
 
-      <section className="action-panel">
-        {isShutdown ? (
-          <div className="shutdown-card">
-            <h3>COMPANY SHUTDOWN</h3>
-            <p>
-              Reputation and compliance both dropped below 50. Regulators and customers forced
-              a shutdown.
-            </p>
-            <p>
-              FINAL HEALTH: REP {state.reputation.toFixed(1)} / COMP {state.compliance.toFixed(1)}
-            </p>
-            <button className="btn primary" onClick={() => void createGame()} disabled={actionLoading}>
-              START NEW RUN
-            </button>
+        <section className="budget-card panel-budget">
+          <div className="budget-line">
+            <span>R&D ENERGY BUDGET</span>
+            <strong>
+              {formatMoney(game.budget.spent)} / {formatMoney(game.budget.cap)}
+            </strong>
           </div>
-        ) : !pending ? (
-          <button
-            className="btn primary"
-            onClick={() => void runQuarter()}
-            disabled={actionLoading || isGameOver}
-          >
-            {actionLoading ? "SIMULATING..." : "RUN QUARTER"}
-          </button>
-        ) : (
-          <div className="report-card">
-            <h3>BOARD EVALUATION REPORT</h3>
-            <div className="report-grid">
-              <p>REVENUE: <strong>{formatMoney(pending.revenue)}</strong></p>
-              <p>NET PROFIT: <strong>{formatMoney(pending.net_profit)}</strong></p>
-              <p>INCIDENTS: <strong>{pending.incidents}</strong></p>
-              <p>RUNWAY: <strong>{pending.runway_quarters.toFixed(1)} QUARTERS</strong></p>
-              <p>
-                SCORE:
-                <strong className={scoreClass(pending.score)}>
-                  {` ${pending.score.toFixed(1)} (${pending.band})`}
-                </strong>
+          <div className="budget-track">
+            <div className="budget-fill" style={{ width: `${budgetUsedRatio}%` }} />
+          </div>
+          <p>{formatMoney(game.budget.remaining)} REMAINING THIS QUARTER</p>
+        </section>
+
+        <section className="models-grid panel-models">
+          {state.models.map((model, modelIndex) => (
+            <article className="model-card" key={model.name}>
+              <h3>{model.name}</h3>
+              <p className="model-levels">
+                CAP {model.capability} · SAF {model.safety} · EFF {model.efficiency} · MKT {model.market}
               </p>
-              <p>DILUTION: <strong>{(pending.dilution * 100).toFixed(2)}%</strong></p>
-            </div>
-            <p className="funding-offer">
-              OFFER: {formatMoney(pending.raise_amount)} AT {formatMoney(pending.pre_money)} PRE-MONEY
-            </p>
-            <div className="funding-actions">
-              <button className="btn primary" onClick={() => void decideFunding(true)} disabled={actionLoading}>
-                ACCEPT FUNDING
+              <p className="model-age">LIVE FOR {model.quarters_live} QUARTERS</p>
+              <div className="upgrade-buttons">
+                {UPGRADE_TYPES.map((upgradeType) => (
+                  <button
+                    key={upgradeType}
+                    className="btn upgrade"
+                    onClick={() => void applyUpgrade(modelIndex, upgradeType)}
+                    disabled={actionLoading || !!pending || isGameOver || isPausedByEvent}
+                  >
+                    + {upgradeType.toUpperCase()}
+                  </button>
+                ))}
+              </div>
+            </article>
+          ))}
+        </section>
+
+        <section className="ops-grid panel-ops">
+          <article className="log-card">
+            <h3>COMMAND LOG</h3>
+            {game.budget.actions.length === 0 ? (
+              <p>NO UPGRADES ISSUED THIS QUARTER.</p>
+            ) : (
+              <ul>
+                {game.budget.actions.slice(-5).map((entry) => (
+                  <li key={entry}>{entry.toUpperCase()}</li>
+                ))}
+              </ul>
+            )}
+          </article>
+
+          <article className="warnings-card">
+            <h3>STRATEGY SIGNALS</h3>
+            <ul>
+              {(game.challenge_flags || []).map((flag) => (
+                <li key={flag}>{flag.toUpperCase()}</li>
+              ))}
+            </ul>
+          </article>
+        </section>
+
+        <section className="analytics-grid panel-analytics">
+          <Sparkline values={revenueTrend} color="#61c7ff" title="REVENUE TREND (M)" />
+          <Sparkline values={profitTrend} color="#89deff" title="PROFIT TREND (M)" />
+          <Sparkline values={reputationTrend} color="#6dffce" title="REPUTATION" />
+          <Sparkline values={complianceTrend} color="#73b7ff" title="COMPLIANCE" />
+          <Sparkline values={pressureTrend} color="#ffab8f" title="COMPETITIVE PRESSURE x10" />
+        </section>
+
+        <section className="model-metrics-grid panel-model-metrics">
+          {modelMetrics.map((metric) => (
+            <article className="model-metric-card" key={metric.name}>
+              <h3>{metric.name}</h3>
+              <div className="metric-row">
+                <span>Performance</span>
+                <strong>{metric.performance.toFixed(1)}</strong>
+              </div>
+              <div className="bar-track">
+                <div className="bar-fill bar-performance" style={{ width: `${clamp(metric.performance, 0, 100)}%` }} />
+              </div>
+              <div className="metric-row">
+                <span>Reliability</span>
+                <strong>{metric.reliability.toFixed(1)}</strong>
+              </div>
+              <div className="bar-track">
+                <div className="bar-fill bar-reliability" style={{ width: `${clamp(metric.reliability, 0, 100)}%` }} />
+              </div>
+              <div className="metric-row">
+                <span>Balance</span>
+                <strong>{metric.balance.toFixed(1)}</strong>
+              </div>
+              <div className="bar-track">
+                <div className="bar-fill bar-balance" style={{ width: `${clamp(metric.balance, 0, 100)}%` }} />
+              </div>
+              <div className="metric-row">
+                <span>Risk</span>
+                <strong>{metric.risk.toFixed(1)}</strong>
+              </div>
+              <div className="bar-track">
+                <div className="bar-fill bar-risk" style={{ width: `${clamp(metric.risk, 0, 100)}%` }} />
+              </div>
+            </article>
+          ))}
+        </section>
+
+        <section className="action-panel panel-action">
+          {isShutdown ? (
+            <div className="shutdown-card">
+              <h3>COMPANY SHUTDOWN</h3>
+              <p>
+                Reputation and compliance both dropped below 50. Regulators and customers forced
+                a shutdown.
+              </p>
+              <p>
+                FINAL HEALTH: REP {state.reputation.toFixed(1)} / COMP {state.compliance.toFixed(1)}
+              </p>
+              <button className="btn primary" onClick={() => void createGame()} disabled={actionLoading || isPausedByEvent}>
+                START NEW RUN
               </button>
-              <button className="btn ghost" onClick={() => void decideFunding(false)} disabled={actionLoading}>
-                DECLINE FUNDING
-              </button>
             </div>
-          </div>
-        )}
-      </section>
+          ) : !pending ? (
+            <button
+              className="btn primary"
+              onClick={() => void runQuarter()}
+              disabled={actionLoading || isGameOver || isPausedByEvent}
+            >
+              {actionLoading ? "SIMULATING..." : "RUN QUARTER"}
+            </button>
+          ) : (
+            <div className="report-card">
+              <h3>BOARD EVALUATION REPORT</h3>
+              <div className="report-grid">
+                <p>REVENUE: <strong>{formatMoney(pending.revenue)}</strong></p>
+                <p>NET PROFIT: <strong>{formatMoney(pending.net_profit)}</strong></p>
+                <p>INCIDENTS: <strong>{pending.incidents}</strong></p>
+                <p>RUNWAY: <strong>{pending.runway_quarters.toFixed(1)} QUARTERS</strong></p>
+                <p>
+                  SCORE:
+                  <strong className={scoreClass(pending.score)}>
+                    {` ${pending.score.toFixed(1)} (${pending.band})`}
+                  </strong>
+                </p>
+                <p>DILUTION: <strong>{(pending.dilution * 100).toFixed(2)}%</strong></p>
+              </div>
+              <p className="funding-offer">
+                OFFER: {formatMoney(pending.raise_amount)} AT {formatMoney(pending.pre_money)} PRE-MONEY
+              </p>
+              <div className="funding-actions">
+                <button className="btn primary" onClick={() => void decideFunding(true)} disabled={actionLoading || isPausedByEvent}>
+                  ACCEPT FUNDING
+                </button>
+                <button className="btn ghost" onClick={() => void decideFunding(false)} disabled={actionLoading || isPausedByEvent}>
+                  DECLINE FUNDING
+                </button>
+              </div>
+            </div>
+          )}
+        </section>
+      </div>
+
+      {isPausedByEvent ? (
+        <div className="event-modal-backdrop" role="dialog" aria-modal="true" aria-label="Quarterly world event">
+          <article className="event-modal">
+            <p className="event-kicker">NEW WORLD EVENT</p>
+            <h2>{activeEvent.title}</h2>
+            <p>{activeEvent.description}</p>
+            <p className="event-impact-line">Impact: {activeEvent.impact}</p>
+            <button className="btn primary" onClick={() => setEventModalOpen(false)}>
+              ACKNOWLEDGE EVENT
+            </button>
+          </article>
+        </div>
+      ) : null}
     </main>
   );
 }

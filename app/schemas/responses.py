@@ -12,6 +12,13 @@ class ModelStateResponse(BaseModel):
     quarters_live: int
 
 
+class WorldEventResponse(BaseModel):
+    key: str
+    title: str
+    description: str
+    impact: str
+
+
 class CompanyStateResponse(BaseModel):
     name: str
     quarter: int
@@ -23,6 +30,7 @@ class CompanyStateResponse(BaseModel):
     last_quarter_revenue: float
     last_quarter_profit: float
     total_incidents: int
+    active_event: Optional[WorldEventResponse] = None
     models: List[ModelStateResponse]
 
 

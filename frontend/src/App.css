@@ -12,9 +12,10 @@
 
 .shell {
   position: relative;
-  max-width: 1220px;
-  margin: 1.2rem auto;
-  padding: 1rem;
+  width: min(98vw, 1500px);
+  height: calc(100vh - 0.8rem);
+  margin: 0.4rem auto;
+  padding: 0.8rem;
   border: 2px solid var(--line);
   box-shadow: 0 0 0 2px #030c1a, 0 0 0 4px var(--line), 0 24px 50px rgba(0, 0, 0, 0.5);
   background: rgba(3, 10, 22, 0.92);
@@ -80,19 +81,66 @@
 .budget-card,
 .models-grid,
 .log-card,
+.warnings-card,
 .action-panel,
 .error-banner,
-.loading-panel {
+.loading-panel,
+.analytics-grid,
+.model-metrics-grid,
+.ops-grid {
   position: relative;
   z-index: 2;
+}
+
+.dashboard-grid {
+  display: grid;
+  grid-template-columns: 1.6fr 1fr;
+  grid-template-rows: auto 1fr auto;
+  gap: 0.5rem;
+  height: calc(100% - 90px);
+}
+
+.panel-metrics {
+  grid-column: 1;
+  grid-row: 1;
+}
+
+.panel-budget {
+  grid-column: 2;
+  grid-row: 1;
+}
+
+.panel-models {
+  grid-column: 1;
+  grid-row: 2;
+}
+
+.panel-analytics {
+  grid-column: 2;
+  grid-row: 2;
+}
+
+.panel-ops {
+  grid-column: 1;
+  grid-row: 3;
+}
+
+.panel-model-metrics {
+  grid-column: 2;
+  grid-row: 3;
+}
+
+.panel-action {
+  grid-column: 1 / 3;
+  grid-row: 4;
 }
 
 .topbar {
   display: flex;
   justify-content: space-between;
-  gap: 1rem;
+  gap: 0.7rem;
   align-items: flex-start;
-  margin-bottom: 0.9rem;
+  margin-bottom: 0.55rem;
 }
 
 .title-block {
@@ -144,7 +192,7 @@ h1 {
 .subtitle {
   margin: 0;
   color: var(--text-dim);
-  font-size: 0.77rem;
+  font-size: 0.82rem;
   letter-spacing: 0.06em;
 }
 
@@ -177,7 +225,7 @@ h1 {
 .metrics-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 0.55rem;
+  gap: 0.45rem;
 }
 
 .metric-card,
@@ -193,7 +241,7 @@ h1 {
 }
 
 .metric-card {
-  padding: 0.7rem;
+  padding: 0.58rem;
 }
 
 .metric-card label {
@@ -204,15 +252,15 @@ h1 {
 }
 
 .metric-card h2 {
-  margin: 0.4rem 0 0;
+  margin: 0.28rem 0 0;
   font-family: "VT323", monospace;
   color: var(--text-main);
-  font-size: clamp(1.5rem, 2.5vw, 2rem);
+  font-size: clamp(1.75rem, 2.8vw, 2.25rem);
 }
 
 .budget-card {
-  margin-top: 0.55rem;
-  padding: 0.75rem;
+  margin-top: 0;
+  padding: 0.58rem;
 }
 
 .budget-line {
@@ -225,7 +273,7 @@ h1 {
 
 .budget-track {
   height: 12px;
-  margin: 0.6rem 0 0.5rem;
+  margin: 0.4rem 0 0.35rem;
   border: 2px solid #102f57;
   background: #07142a;
 }
@@ -250,14 +298,14 @@ h1 {
 }
 
 .models-grid {
-  margin-top: 0.65rem;
+  margin-top: 0;
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 0.65rem;
+  gap: 0.45rem;
 }
 
 .model-card {
-  padding: 0.75rem;
+  padding: 0.56rem;
 }
 
 .model-card h3 {
@@ -279,23 +327,29 @@ h1 {
 }
 
 .upgrade-buttons {
-  margin-top: 0.65rem;
+  margin-top: 0.45rem;
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0.38rem;
+  gap: 0.3rem;
 }
 
 .log-card {
-  margin-top: 0.65rem;
-  padding: 0.75rem;
+  margin-top: 0;
+  padding: 0.58rem;
 }
 
 .warnings-card {
-  margin-top: 0.65rem;
-  padding: 0.75rem;
+  margin-top: 0;
+  padding: 0.58rem;
   background: #30191f;
   border: 2px solid #91576a;
   box-shadow: inset 0 0 0 2px #241116;
+}
+
+.ops-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.45rem;
 }
 
 .warnings-card h3 {
@@ -318,10 +372,10 @@ h1 {
 }
 
 .analytics-grid {
-  margin-top: 0.65rem;
+  margin-top: 0;
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 0.65rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.45rem;
 }
 
 .spark-card {
@@ -350,7 +404,7 @@ h1 {
 
 .spark-svg {
   width: 100%;
-  height: 84px;
+  height: 72px;
   border: 1px solid #1a4a80;
   background:
     linear-gradient(to bottom, rgba(180, 225, 255, 0.05) 1px, transparent 1px),
@@ -359,17 +413,17 @@ h1 {
 }
 
 .model-metrics-grid {
-  margin-top: 0.65rem;
+  margin-top: 0;
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 0.65rem;
+  gap: 0.45rem;
 }
 
 .model-metric-card {
   background: #0c203e;
   border: 2px solid #2a5f9e;
   box-shadow: inset 0 0 0 2px #07142a;
-  padding: 0.65rem;
+  padding: 0.52rem;
 }
 
 .model-metric-card h3 {
@@ -441,11 +495,11 @@ h1 {
 }
 
 .action-panel {
-  margin-top: 0.7rem;
+  margin-top: 0;
 }
 
 .report-card {
-  padding: 0.75rem;
+  padding: 0.58rem;
   animation: popIn 220ms steps(8, end);
 }
 
@@ -504,7 +558,7 @@ h1 {
 }
 
 .funding-offer {
-  margin: 0.6rem 0;
+  margin: 0.42rem 0;
   font-size: 0.72rem;
   color: var(--text-main);
 }
@@ -519,10 +573,10 @@ h1 {
   background: #0a223f;
   color: var(--text-main);
   font-family: "Press Start 2P", monospace;
-  font-size: 0.58rem;
+  font-size: 0.62rem;
   letter-spacing: 0.04em;
   line-height: 1.45;
-  padding: 0.55rem 0.45rem;
+  padding: 0.48rem 0.42rem;
   cursor: pointer;
   transition: transform 80ms steps(2, end), filter 120ms linear;
   box-shadow: 2px 2px 0 #021022;
@@ -561,8 +615,8 @@ h1 {
 }
 
 .error-banner {
-  margin: 0.6rem 0;
-  padding: 0.6rem;
+  margin: 0.45rem 0;
+  padding: 0.45rem;
   border-color: #a23c5a;
   background: #3c1220;
   color: #ffd6e1;
@@ -597,7 +651,78 @@ h1 {
   color: var(--alert);
 }
 
+.event-modal-backdrop {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+  background: rgba(2, 9, 20, 0.8);
+}
+
+.event-modal {
+  width: min(760px, 90vw);
+  background: #2f1420;
+  border: 3px solid #bd6f89;
+  box-shadow: 0 0 0 2px #3b1d28, 0 14px 40px rgba(0, 0, 0, 0.45);
+  padding: 1rem;
+}
+
+.event-kicker {
+  margin: 0;
+  font-size: 0.7rem;
+  color: #ffc7d6;
+  letter-spacing: 0.1em;
+}
+
+.event-modal h2 {
+  margin: 0.45rem 0 0;
+  font-size: 1.05rem;
+  color: #ffe4bc;
+  letter-spacing: 0.04em;
+}
+
+.event-modal p {
+  margin: 0.45rem 0 0;
+  font-size: 0.86rem;
+  color: #ffd2da;
+  line-height: 1.4;
+}
+
+.event-impact-line {
+  color: #ffd8b3;
+}
+
+.event-modal .btn {
+  margin-top: 0.7rem;
+}
+
 @media (max-width: 980px) {
+  .shell {
+    width: min(98vw, 1220px);
+    height: auto;
+    min-height: calc(100vh - 0.9rem);
+    overflow: visible;
+  }
+
+  .dashboard-grid {
+    height: auto;
+    grid-template-columns: 1fr;
+    grid-template-rows: auto;
+  }
+
+  .panel-metrics,
+  .panel-budget,
+  .panel-models,
+  .panel-analytics,
+  .panel-ops,
+  .panel-model-metrics,
+  .panel-action {
+    grid-column: auto;
+    grid-row: auto;
+  }
+
   .metrics-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -605,6 +730,10 @@ h1 {
   .analytics-grid,
   .model-metrics-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .ops-grid {
+    grid-template-columns: 1fr;
   }
 
   .models-grid {

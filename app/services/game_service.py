@@ -16,6 +16,7 @@ from app.domain.models import (
 )
 from app.domain.scoring import evaluate_company
 from app.domain.simulation import quarter_budget_limit, simulate_model_outcome, state_status
+from app.domain.simulation import start_quarter_event
 from app.schemas.requests import ApplyUpgradesRequest, FundingDecisionRequest, NewGameRequest
 from app.schemas.responses import (
     BudgetResponse,
@@ -26,6 +27,7 @@ from app.schemas.responses import (
     PendingRoundResponse,
     QuarterHistoryPointResponse,
     QuarterOutcomeResponse,
+    WorldEventResponse,
 )
 from app.storage.memory_store import MemoryGameStore
 
@@ -92,6 +94,7 @@ class GameService:
             raise HTTPException(status_code=400, detail="Game is not active")
 
         state.cash -= session.quarter_spent
+        event = start_quarter_event(state)
 
         model_results = [simulate_model_outcome(model, state) for model in state.models]
         total_revenue = sum(m["revenue"] for m in model_results)
@@ -110,11 +113,13 @@ class GameService:
         competitive_pressure = market_overreach + capability_overreach
 
         base_burn = 1_050_000 + sum(model.level_sum() for model in state.models) * 68_000
+        base_burn *= event.operating_cost_multiplier
 
         # Force strategic tradeoffs: aggressive market/capability without safety+efficiency
         # causes regulatory pressure, extra burn, and trust/compliance penalties.
         regulatory_penalty = competitive_pressure * 320_000
         pressure_burn = competitive_pressure * 140_000
+        regulatory_penalty += event.regulatory_pressure * 180_000
 
         operating_profit = total_gross_profit - base_burn - incident_costs - regulatory_penalty - pressure_burn
         state.cash += operating_profit
@@ -140,11 +145,25 @@ class GameService:
 
         state.reputation = max(
             15.0,
-            min(100.0, state.reputation + trust_gain - total_trust_hit - pressure_trust_hit),
+            min(
+                100.0,
+                state.reputation
+                + trust_gain
+                - total_trust_hit
+                - pressure_trust_hit
+                + event.reputation_shift,
+            ),
         )
         state.compliance = max(
             10.0,
-            min(100.0, state.compliance + compliance_gain - total_compliance_hit - pressure_compliance_hit),
+            min(
+                100.0,
+                state.compliance
+                + compliance_gain
+                - total_compliance_hit
+                - pressure_compliance_hit
+                + event.compliance_shift,
+            ),
         )
         state.total_incidents += incidents
 
@@ -287,6 +306,16 @@ class GameService:
             last_quarter_revenue=state.last_quarter_revenue,
             last_quarter_profit=state.last_quarter_profit,
             total_incidents=state.total_incidents,
+            active_event=(
+                WorldEventResponse(
+                    key=state.active_event.key,
+                    title=state.active_event.title,
+                    description=state.active_event.description,
+                    impact=state.active_event.impact,
+                )
+                if state.active_event
+                else None
+            ),
             models=[
                 ModelStateResponse(
                     name=m.name,

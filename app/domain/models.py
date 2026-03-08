@@ -48,6 +48,7 @@ class CompanyState:
     last_quarter_revenue: float = 0.0
     last_quarter_profit: float = 0.0
     total_incidents: int = 0
+    active_event: Optional["WorldEvent"] = None
     models: List[ModelUnit] = field(default_factory=list)
 
     def runway_quarters(self, burn: float) -> float:
@@ -71,6 +72,21 @@ class QuarterOutcome:
     raise_amount: float
     post_money: float
     dilution: float
+
+
+@dataclass
+class WorldEvent:
+    key: str
+    title: str
+    description: str
+    impact: str
+    demand_multiplier: float = 1.0
+    margin_shift: float = 0.0
+    incident_risk_shift: float = 0.0
+    operating_cost_multiplier: float = 1.0
+    reputation_shift: float = 0.0
+    compliance_shift: float = 0.0
+    regulatory_pressure: float = 0.0
 
 
 @dataclass
