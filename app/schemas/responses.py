@@ -128,7 +128,7 @@ class FinalStatsResponse(BaseModel):
 
 class GameSessionResponse(BaseModel):
     game_id: str
-    status: Literal["active", "bankrupt", "completed", "shutdown"]
+    status: Literal["active", "completed", "shutdown", "leader"]
     state: CompanyStateResponse
     budget: BudgetResponse
     upgrade_effects: Dict[str, Dict[str, float]]

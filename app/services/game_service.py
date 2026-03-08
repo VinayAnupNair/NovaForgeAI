@@ -53,6 +53,9 @@ class GameService:
 
     def _session_status(self, session: GameSession) -> str:
         if session.game_completed:
+            # Check if player won (rank 1)
+            if session.final_stats and session.final_stats.player_rank == 1:
+                return "leader"
             return "completed"
         return state_status(session.state)
 

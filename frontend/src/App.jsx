@@ -311,7 +311,8 @@ function App() {
   }, [game, seenEventKey]);
 
   useEffect(() => {
-    if (!game || game.status !== "completed" || game.epilogue) return;
+    const needsEpilogue = game?.status === "completed" || game?.status === "leader";
+    if (!game || !needsEpilogue || game.epilogue) return;
     if (epilogueRequestedForGame === game.game_id) return;
     setEpilogueRequestedForGame(game.game_id);
     void requestEpilogue(game.game_id);
@@ -394,6 +395,7 @@ function App() {
   const state = game.state;
   const pending = game.pending_round?.quarter_outcome;
   const isCompleted = game.status === "completed";
+  const isLeader = game.status === "leader";
   const isShutdown = game.status === "shutdown";
   const isGameOver = game.status !== "active";
   const history = game.history || [];
@@ -413,7 +415,7 @@ function App() {
   const rivalStatus = game.rival_status || "not-run";
   const finalStats = game.final_stats;
   const epilogue = game.epilogue;
-  const isPausedByOverlay = isPausedByEvent || isCompleted || isShutdown;
+  const isPausedByOverlay = isPausedByEvent || isCompleted || isLeader || isShutdown;
   const roundedValuationMillions = finalStats
     ? Math.round(finalStats.valuation / 10_000) / 100
     : 0;
@@ -435,16 +437,13 @@ function App() {
           </p>
         </div>
         <div className="title-controls">
-          <div className="user-info">
-            <span className="user-badge">USER: {user?.username?.toUpperCase() || "GUEST"}</span>
-            <button className="btn ghost btn-sm" onClick={() => void handleLogout()} disabled={actionLoading}>
-              LOGOUT
-            </button>
-          </div>
           <div className={`ai-badge ${isShutdown ? "danger" : ""}`}>
             {isShutdown ? "AI CORE OFFLINE" : "AI CORE ONLINE"}
           </div>
           <div className="title-actions">
+            <button className="btn ghost" onClick={() => void handleLogout()} disabled={actionLoading}>
+              LOGOUT
+            </button>
             <button className="btn ghost" onClick={() => void openHistory()} disabled={actionLoading}>
               HISTORY
             </button>
@@ -621,7 +620,7 @@ function App() {
                 START NEW RUN
               </button>
             </div>
-          ) : isCompleted ? null : !pending ? (
+          ) : isCompleted || isLeader ? null : !pending ? (
             <button
               className="btn primary"
               onClick={() => void runQuarter()}
@@ -691,11 +690,11 @@ function App() {
         </div>
       ) : null}
 
-      {isCompleted ? (
+      {isCompleted || isLeader ? (
         <div className="completion-modal-backdrop" role="dialog" aria-modal="true" aria-label="Run complete">
           <article className="completion-modal">
             <p className="completion-kicker">END OF RUN</p>
-            <h2>RUN COMPLETE</h2>
+            <h2>{isLeader ? "VICTORY - MARKET LEADER" : "RUN COMPLETE"}</h2>
             {finalStats ? (
               <div className="completion-stats-grid">
                 <div className="completion-stat-card">

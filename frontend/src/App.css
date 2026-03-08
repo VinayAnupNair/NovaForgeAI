@@ -1223,24 +1223,3 @@ h1 {
   margin-top: 0.4rem;
 }
 
-.user-info {
-  display: flex;
-  gap: 0.35rem;
-  align-items: center;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-}
-
-.user-badge {
-  font-size: 0.74rem;
-  letter-spacing: 0.08em;
-  color: #9dd4ff;
-  padding: 0.28rem 0.45rem;
-  background: #0d2747;
-  border: 1px solid #2e5d94;
-}
-
-.btn-sm {
-  font-size: 0.7rem;
-  padding: 0.42rem 0.48rem;
-}

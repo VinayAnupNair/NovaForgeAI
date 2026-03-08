@@ -63,8 +63,6 @@ def quarter_budget_limit(state: CompanyState) -> int:
 
 
 def state_status(state: CompanyState) -> str:
-    if state.cash <= 0:
-        return "bankrupt"
     if state.reputation < 50 and state.compliance < 50:
         return "shutdown"
     if state.year >= 4:
