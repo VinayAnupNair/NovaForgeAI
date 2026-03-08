@@ -127,6 +127,8 @@ function App() {
   const [error, setError] = useState("");
   const [eventModalOpen, setEventModalOpen] = useState(false);
   const [seenEventKey, setSeenEventKey] = useState(null);
+  const [epilogueLoading, setEpilogueLoading] = useState(false);
+  const [epilogueRequestedForGame, setEpilogueRequestedForGame] = useState(null);
 
   useEffect(() => {
     void createGame();
@@ -138,6 +140,8 @@ function App() {
       setError("");
       setEventModalOpen(false);
       setSeenEventKey(null);
+      setEpilogueLoading(false);
+      setEpilogueRequestedForGame(null);
       const data = await fetchJson(`${API_BASE}/games`, {
         method: "POST",
         body: JSON.stringify({ company_name: "NovaForge AI" }),
@@ -202,6 +206,20 @@ function App() {
     }
   }
 
+  async function requestEpilogue(gameId) {
+    try {
+      setEpilogueLoading(true);
+      const data = await fetchJson(`${API_BASE}/games/${gameId}/epilogue`, {
+        method: "POST",
+      });
+      setGame(data);
+    } catch (err) {
+      setError(err.message || "Epilogue generation failed");
+    } finally {
+      setEpilogueLoading(false);
+    }
+  }
+
   const budgetUsedRatio = useMemo(() => {
     if (!game?.budget?.cap) return 0;
     return Math.min(100, Math.round((game.budget.spent / game.budget.cap) * 100));
@@ -215,6 +233,13 @@ function App() {
       setSeenEventKey(eventKey);
     }
   }, [game, seenEventKey]);
+
+  useEffect(() => {
+    if (!game || game.status !== "completed" || game.epilogue) return;
+    if (epilogueRequestedForGame === game.game_id) return;
+    setEpilogueRequestedForGame(game.game_id);
+    void requestEpilogue(game.game_id);
+  }, [game, epilogueRequestedForGame]);
 
   if (loading) {
     return (
@@ -239,6 +264,7 @@ function App() {
 
   const state = game.state;
   const pending = game.pending_round?.quarter_outcome;
+  const isCompleted = game.status === "completed";
   const isShutdown = game.status === "shutdown";
   const isGameOver = game.status !== "active";
   const history = game.history || [];
@@ -255,10 +281,16 @@ function App() {
   const pressureTrend = history.map((h) => h.competitive_pressure * 10);
   const leaderboard = game.leaderboard || [];
   const rivalActions = game.rival_actions_last_quarter || [];
-  const geminiStatus = game.gemini_status || "not-run";
+  const rivalStatus = game.rival_status || "not-run";
+  const finalStats = game.final_stats;
+  const epilogue = game.epilogue;
+  const isPausedByOverlay = isPausedByEvent || isCompleted || isShutdown;
+  const roundedValuationMillions = finalStats
+    ? Math.round(finalStats.valuation / 10_000) / 100
+    : 0;
 
   return (
-    <main className={`shell ${isShutdown ? "danger-mode" : ""} ${isPausedByEvent ? "paused" : ""}`}>
+    <main className={`shell ${isShutdown ? "danger-mode" : ""} ${isPausedByOverlay ? "paused" : ""}`}>
       <div className="ambient-grid" />
       <div className="ambient-glow" />
 
@@ -277,7 +309,7 @@ function App() {
           <div className={`ai-badge ${isShutdown ? "danger" : ""}`}>
             {isShutdown ? "AI CORE OFFLINE" : "AI CORE ONLINE"}
           </div>
-          <button className="btn ghost" onClick={() => void createGame()} disabled={actionLoading || isPausedByEvent}>
+          <button className="btn ghost" onClick={() => void createGame()} disabled={actionLoading || isPausedByOverlay}>
             NEW RUN
           </button>
         </div>
@@ -335,7 +367,7 @@ function App() {
                     key={upgradeType}
                     className="btn upgrade"
                     onClick={() => void applyUpgrade(modelIndex, upgradeType)}
-                    disabled={actionLoading || !!pending || isGameOver || isPausedByEvent || unaffordable}
+                    disabled={actionLoading || !!pending || isGameOver || isPausedByOverlay || unaffordable}
                     title={`Upgrade ${upgradeType} for ${formatMoney(upgradeCost)}`}
                   >
                     <span className="upgrade-label">+ {UPGRADE_SHORT_LABELS[upgradeType]}</span>
@@ -372,9 +404,9 @@ function App() {
           </article>
 
           <article className="leaderboard-card">
-            <h3>LEADERBOARD (YOU VS GEMINI)</h3>
-            <p className="leaderboard-note">Powered by backend Gemini rival decisions each quarter.</p>
-            <p className="leaderboard-note">Gemini status: {geminiStatus.toUpperCase()}</p>
+            <h3>LEADERBOARD (YOU VS RIVAL)</h3>
+            <p className="leaderboard-note">Powered by backend rival decisions each quarter.</p>
+            <p className="leaderboard-note">Rival status: {rivalStatus.toUpperCase()}</p>
             <table>
               <thead>
                 <tr>
@@ -398,7 +430,7 @@ function App() {
               </tbody>
             </table>
             <div className="rival-action-feed">
-              <p>Gemini Moves:</p>
+              <p>Rival Moves:</p>
               {rivalActions.length ? (
                 <ul>
                   {rivalActions.map((action, idx) => (
@@ -469,15 +501,15 @@ function App() {
               <p>
                 FINAL HEALTH: REP {state.reputation.toFixed(1)} / COMP {state.compliance.toFixed(1)}
               </p>
-              <button className="btn primary" onClick={() => void createGame()} disabled={actionLoading || isPausedByEvent}>
+              <button className="btn primary" onClick={() => void createGame()} disabled={actionLoading || isPausedByOverlay}>
                 START NEW RUN
               </button>
             </div>
-          ) : !pending ? (
+          ) : isCompleted ? null : !pending ? (
             <button
               className="btn primary"
               onClick={() => void runQuarter()}
-              disabled={actionLoading || isGameOver || isPausedByEvent}
+              disabled={actionLoading || isGameOver || isPausedByOverlay}
             >
               {actionLoading ? "SIMULATING..." : "RUN QUARTER"}
             </button>
@@ -501,10 +533,10 @@ function App() {
                 OFFER: {formatMoney(pending.raise_amount)} AT {formatMoney(pending.pre_money)} PRE-MONEY
               </p>
               <div className="funding-actions">
-                <button className="btn primary" onClick={() => void decideFunding(true)} disabled={actionLoading || isPausedByEvent}>
+                <button className="btn primary" onClick={() => void decideFunding(true)} disabled={actionLoading || isPausedByOverlay}>
                   ACCEPT FUNDING
                 </button>
-                <button className="btn ghost" onClick={() => void decideFunding(false)} disabled={actionLoading || isPausedByEvent}>
+                <button className="btn ghost" onClick={() => void decideFunding(false)} disabled={actionLoading || isPausedByOverlay}>
                   DECLINE FUNDING
                 </button>
               </div>
@@ -536,6 +568,37 @@ function App() {
             <p className="event-impact-line">
               Final health: REP {state.reputation.toFixed(1)} / COMP {state.compliance.toFixed(1)}
             </p>
+            <button className="btn primary" onClick={() => void createGame()} disabled={actionLoading}>
+              START NEW RUN
+            </button>
+          </article>
+        </div>
+      ) : null}
+
+      {isCompleted ? (
+        <div className="completion-modal-backdrop" role="dialog" aria-modal="true" aria-label="Run complete">
+          <article className="completion-modal">
+            <p className="completion-kicker">END OF RUN</p>
+            <h2>RUN COMPLETE</h2>
+            {finalStats ? (
+              <div className="completion-stats-grid">
+                <div className="completion-stat-card">
+                  <span>VALUATION</span>
+                  <strong>{roundedValuationMillions.toFixed(2)}</strong>
+                </div>
+                <div className="completion-stat-card">
+                  <span>REPUTATION</span>
+                  <strong>{finalStats.reputation.toFixed(1)}</strong>
+                </div>
+                <div className="completion-stat-card">
+                  <span>COMPLIANCE</span>
+                  <strong>{finalStats.compliance.toFixed(1)}</strong>
+                </div>
+              </div>
+            ) : null}
+            <div className="completion-epilogue-box">
+              {epilogue ? <p>{epilogue}</p> : <p>EPILOGUE LOADING...</p>}
+            </div>
             <button className="btn primary" onClick={() => void createGame()} disabled={actionLoading}>
               START NEW RUN
             </button>

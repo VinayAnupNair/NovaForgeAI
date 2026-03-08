@@ -7,6 +7,7 @@ from fastapi import HTTPException
 from app.domain.funding import funding_offer
 from app.domain.models import (
     CompanyState,
+    FinalStats,
     GameSession,
     LeaderboardEntry,
     ModelPerformanceSnapshot,
@@ -15,6 +16,7 @@ from app.domain.models import (
     QuarterHistoryPoint,
     QuarterOutcome,
     RivalAction,
+    WorldEvent,
     UPGRADE_EFFECTS,
 )
 from app.domain.scoring import evaluate_company
@@ -24,6 +26,7 @@ from app.schemas.requests import ApplyUpgradesRequest, FundingDecisionRequest, N
 from app.schemas.responses import (
     BudgetResponse,
     CompanyStateResponse,
+    FinalStatsResponse,
     GameSessionResponse,
     LeaderboardEntryResponse,
     ModelPerformanceResponse,
@@ -34,14 +37,21 @@ from app.schemas.responses import (
     RivalActionResponse,
     WorldEventResponse,
 )
-from app.services.gemini_rival_service import GeminiRivalService
+from app.services.epilogue_service import EpilogueService
+from app.services.rival_service import RivalService
 from app.storage.memory_store import MemoryGameStore
 
 
 class GameService:
     def __init__(self, store: MemoryGameStore) -> None:
         self.store = store
-        self.rival_service = GeminiRivalService()
+        self.rival_service = RivalService()
+        self.epilogue_service = EpilogueService()
+
+    def _session_status(self, session: GameSession) -> str:
+        if session.game_completed:
+            return "completed"
+        return state_status(session.state)
 
     def create_game(self, request: NewGameRequest) -> GameSessionResponse:
         trait_pool = ["aggressive", "conservative", "ops-heavy", "consumer-friendly"]
@@ -65,13 +75,27 @@ class GameService:
         session = self.get_session(game_id)
         return self.serialize_session(game_id, session)
 
+    def generate_epilogue(self, game_id: str) -> GameSessionResponse:
+        session = self.get_session(game_id)
+        if not session.game_completed:
+            raise HTTPException(status_code=400, detail="Epilogue is only available after run completion")
+        if session.final_stats is None:
+            raise HTTPException(status_code=400, detail="Final stats are not available")
+        if not session.epilogue:
+            session.epilogue = self.epilogue_service.generate(
+                company_name=session.state.name,
+                final_stats=session.final_stats,
+                rival_name=session.rival_state.name,
+            )
+        return self.serialize_session(game_id, session)
+
     def apply_upgrades(self, game_id: str, request: ApplyUpgradesRequest) -> GameSessionResponse:
         session = self.get_session(game_id)
 
         if session.pending_round:
             raise HTTPException(status_code=400, detail="Resolve funding decision before more upgrades")
 
-        if state_status(session.state) != "active":
+        if self._session_status(session) != "active":
             raise HTTPException(status_code=400, detail="Game is not active")
 
         budget_cap = quarter_budget_limit(session.state)
@@ -100,7 +124,7 @@ class GameService:
         if session.pending_round:
             raise HTTPException(status_code=400, detail="Funding decision already pending")
 
-        if state_status(state) != "active":
+        if self._session_status(session) != "active":
             raise HTTPException(status_code=400, detail="Game is not active")
 
         state.cash -= session.quarter_spent
@@ -112,8 +136,8 @@ class GameService:
         incidents = int(sum(m["incident"] for m in model_results))
         incident_costs = sum(m["incident_cost"] for m in model_results)
 
-        rival_actions, gemini_status = self.rival_service.choose_actions(state, event)
-        session.gemini_status = gemini_status
+        rival_actions, rival_status = self.rival_service.choose_actions(state, event)
+        session.rival_status = rival_status
         session.rival_actions_last_quarter = rival_actions
 
         demand_penalty = 0.0
@@ -121,24 +145,41 @@ class GameService:
         burn_penalty = 0.0
         rival_rep_penalty = 0.0
         rival_comp_penalty = 0.0
+        rival_risk_pressure = 0.0
 
         for action in rival_actions:
-            if action.action_type == "price_cut":
-                demand_penalty += 0.025 * action.strength
-                margin_penalty += 0.035 * action.strength
-            elif action.action_type == "lock_in":
+            if action.action_type == "predatory_pricing":
+                demand_penalty += 0.07 * action.strength
+                margin_penalty += 0.09 * action.strength
+                rival_risk_pressure += 0.22 * action.strength
+            elif action.action_type == "regulatory_lobbying":
+                rival_rep_penalty += 1.25 * action.strength
+                if state.compliance < 72:
+                    rival_comp_penalty += 1.85 * action.strength
+                burn_penalty += 120_000 * action.strength
+            elif action.action_type == "moonshot_launch":
                 demand_penalty += 0.045 * action.strength
-            elif action.action_type == "safety_campaign":
-                rival_rep_penalty += 0.9 * action.strength
-                if state.compliance < 60:
-                    rival_comp_penalty += 1.2 * action.strength
-            elif action.action_type == "talent_poach":
-                burn_penalty += 210_000 * action.strength
+                burn_penalty += 260_000 * action.strength
+                rival_rep_penalty += 0.95 * action.strength
+                rival_risk_pressure += 0.3 * action.strength
+            elif action.action_type == "data_center_blitz":
+                margin_penalty += 0.06 * action.strength
+                burn_penalty += 180_000 * action.strength
+                rival_risk_pressure += 0.18 * action.strength
+            elif action.action_type == "upgrade_capability":
+                margin_penalty += 0.018 * action.strength
+                rival_rep_penalty += 0.32 * action.strength
+            elif action.action_type == "upgrade_market":
+                demand_penalty += 0.023 * action.strength
+            elif action.action_type == "upgrade_efficiency":
+                margin_penalty += 0.02 * action.strength
+            elif action.action_type == "upgrade_safety" and state.compliance < 65:
+                rival_comp_penalty += 0.55 * action.strength
 
-        demand_penalty = min(0.22, demand_penalty)
-        margin_penalty = min(0.19, margin_penalty)
-        total_revenue *= max(0.75, 1 - demand_penalty)
-        total_gross_profit *= max(0.72, 1 - margin_penalty)
+        demand_penalty = min(0.3, demand_penalty)
+        margin_penalty = min(0.24, margin_penalty)
+        total_revenue *= max(0.68, 1 - demand_penalty)
+        total_gross_profit *= max(0.66, 1 - margin_penalty)
 
         avg_capability = sum(m.capability for m in state.models) / len(state.models)
         avg_safety = sum(m.safety for m in state.models) / len(state.models)
@@ -238,7 +279,7 @@ class GameService:
             )
 
         session.model_metrics = model_metrics
-        self._update_rival_state(session, total_revenue, rival_actions)
+        self._update_rival_state(session, total_revenue, rival_actions, rival_risk_pressure, event)
         session.leaderboard = self._build_leaderboard(session, score_hint=0.0)
 
         # If company health collapses, end the run immediately without a funding round.
@@ -303,6 +344,38 @@ class GameService:
             )
         )
 
+        if state.year == 3 and state.quarter == 4:
+            player_rank = 1
+            rival_valuation = session.rival_state.valuation
+            rival_score = session.rival_state.score
+            for entry in session.leaderboard:
+                if entry.is_player:
+                    player_rank = entry.rank
+                else:
+                    rival_valuation = entry.valuation
+                    rival_score = entry.score
+
+            session.final_stats = FinalStats(
+                year=state.year,
+                quarter=state.quarter,
+                valuation=state.valuation,
+                cash=state.cash,
+                reputation=state.reputation,
+                compliance=state.compliance,
+                incidents=state.total_incidents,
+                revenue=total_revenue,
+                net_profit=operating_profit,
+                score=score,
+                band=band,
+                player_rank=player_rank,
+                rival_valuation=rival_valuation,
+                rival_score=rival_score,
+            )
+            session.epilogue = None
+            session.game_completed = True
+            session.pending_round = None
+            return self.serialize_session(game_id, session)
+
         session.pending_round = PendingRound(outcome=outcome)
 
         return self.serialize_session(game_id, session)
@@ -311,15 +384,20 @@ class GameService:
         session = self.get_session(game_id)
         state = session.state
 
+        if session.game_completed:
+            raise HTTPException(status_code=400, detail="Game is already completed")
+
         if not session.pending_round:
             raise HTTPException(status_code=400, detail="No pending funding offer")
 
         offer = session.pending_round.outcome
         if request.accept:
             state.cash += offer.raise_amount
-            state.valuation = offer.post_money
+            # Execution friction: headline post-money is discounted slightly.
+            state.valuation = max(offer.pre_money, offer.post_money * 0.95)
         else:
-            state.valuation = max(offer.pre_money, state.valuation * 0.98)
+            # Declining capital in a competitive market triggers stronger repricing.
+            state.valuation = max(offer.pre_money * 0.92, state.valuation * 0.94)
 
         state.quarter += 1
         if state.quarter > 4:
@@ -403,7 +481,7 @@ class GameService:
 
         return GameSessionResponse(
             game_id=game_id,
-            status=state_status(session.state),
+            status=self._session_status(session),
             state=self.serialize_state(session.state),
             budget=BudgetResponse(
                 cap=budget_cap,
@@ -418,9 +496,11 @@ class GameService:
                 RivalActionResponse(**asdict(action)) for action in session.rival_actions_last_quarter
             ],
             leaderboard=[LeaderboardEntryResponse(**asdict(entry)) for entry in session.leaderboard],
-            gemini_status=session.gemini_status,
+            rival_status=session.rival_status,
             challenge_flags=challenge_flags,
             pending_round=pending_round,
+            final_stats=(FinalStatsResponse(**asdict(session.final_stats)) if session.final_stats else None),
+            epilogue=session.epilogue,
         )
 
     def _score_for_leaderboard(
@@ -447,39 +527,118 @@ class GameService:
         session: GameSession,
         player_revenue: float,
         rival_actions: list[RivalAction],
+        risk_pressure: float,
+        event: WorldEvent,
     ) -> None:
         rival = session.rival_state
         action_strength = sum(action.strength for action in rival_actions)
-        action_strength = max(0.0, min(1.9, action_strength))
+        action_strength = max(0.0, min(2.0, action_strength))
 
-        valuation_growth = 0.006 + action_strength * 0.028
-        rival.valuation = max(45_000_000, rival.valuation * (1 + valuation_growth) + player_revenue * 0.026)
+        valuation_growth = 0.012 + action_strength * 0.036
+        rival.valuation = max(45_000_000, rival.valuation * (1 + valuation_growth) + player_revenue * 0.034)
 
         compliance_shift = 0.0
         reputation_shift = 0.0
         incident_risk = 0.09
 
         for action in rival_actions:
-            if action.action_type == "safety_campaign":
-                compliance_shift += 1.3 * action.strength
-                reputation_shift += 0.8 * action.strength
-                incident_risk -= 0.02 * action.strength
-            elif action.action_type == "price_cut":
-                reputation_shift += 0.35 * action.strength
-                incident_risk += 0.02 * action.strength
-            elif action.action_type == "lock_in":
-                reputation_shift += 0.45 * action.strength
+            if action.action_type == "predatory_pricing":
+                reputation_shift += 1.35 * action.strength
+                compliance_shift -= 0.95 * action.strength
+                incident_risk += 0.04 * action.strength
+            elif action.action_type == "regulatory_lobbying":
+                investment_cost = 540_000 * action.strength
+                rival.valuation = max(40_000_000, rival.valuation - investment_cost)
+                compliance_shift += 1.2 * action.strength
+                reputation_shift += 0.6 * action.strength
                 incident_risk += 0.015 * action.strength
-            elif action.action_type == "talent_poach":
-                compliance_shift += 0.3 * action.strength
+            elif action.action_type == "moonshot_launch":
+                rival.valuation += 2_700_000 * action.strength
+                reputation_shift += 2.0 * action.strength
+                compliance_shift -= 1.45 * action.strength
+                incident_risk += 0.075 * action.strength
+            elif action.action_type == "data_center_blitz":
+                rival.valuation += 950_000 * action.strength
+                reputation_shift += 0.9 * action.strength
                 incident_risk += 0.03 * action.strength
+            elif action.action_type == "upgrade_capability":
+                # Invest in AI model capability
+                investment_cost = 610_000 * action.strength
+                rival.valuation = max(40_000_000, rival.valuation - investment_cost)
+                reputation_shift += 1.05 * action.strength
+            elif action.action_type == "upgrade_safety":
+                # Invest in safety and compliance infrastructure
+                investment_cost = 460_000 * action.strength
+                rival.valuation = max(40_000_000, rival.valuation - investment_cost)
+                compliance_shift += 2.9 * action.strength
+                reputation_shift += 1.3 * action.strength
+                incident_risk -= 0.025 * action.strength
+            elif action.action_type == "upgrade_efficiency":
+                # Invest in operational efficiency
+                investment_cost = 500_000 * action.strength
+                rival.valuation = max(40_000_000, rival.valuation - investment_cost)
+                reputation_shift += 0.85 * action.strength
+                incident_risk -= 0.012 * action.strength
+            elif action.action_type == "upgrade_market":
+                # Invest in market reach and brand
+                investment_cost = 560_000 * action.strength
+                rival.valuation = max(40_000_000, rival.valuation - investment_cost)
+                reputation_shift += 1.7 * action.strength
 
         rival.reputation = max(35.0, min(100.0, rival.reputation + reputation_shift))
-        rival.compliance = max(30.0, min(97.0, rival.compliance + compliance_shift))
+        rival.compliance = max(30.0, min(98.5, rival.compliance + compliance_shift))
 
-        incident_risk = max(0.03, min(0.32, incident_risk))
+        incident_risk += min(0.1, risk_pressure * 0.22)
+        incident_risk = max(0.03, min(0.42, incident_risk))
         if random.random() < incident_risk:
             rival.total_incidents += 1
+
+        # Event momentum can trigger visible valuation spikes for rival.
+        demand_impulse = max(0.0, event.demand_multiplier - 1.0) * 0.2
+        margin_impulse = max(0.0, event.margin_shift) * 2.6
+        trust_impulse = max(0.0, event.reputation_shift) * 0.03
+        compliance_impulse = max(0.0, event.compliance_shift) * 0.02
+        volatility_impulse = (
+            abs(event.demand_multiplier - 1.0) * 0.07
+            + abs(event.margin_shift) * 1.0
+            + abs(event.incident_risk_shift) * 0.9
+            + event.regulatory_pressure * 0.025
+        )
+        event_spike_factor = min(
+            0.18,
+            demand_impulse + margin_impulse + trust_impulse + compliance_impulse + (volatility_impulse * 0.45),
+        )
+        if event_spike_factor > 0:
+            rival.valuation += rival.valuation * event_spike_factor
+
+        # Fairness pass: give rival a funding-style repricing step each quarter,
+        # similar to how player valuation gets reset by board funding outcomes.
+        pre_round_valuation = rival.valuation
+
+        strategy_score = max(
+            20.0,
+            min(
+                98.0,
+                rival.reputation * 0.5
+                + rival.compliance * 0.4
+                + action_strength * 12
+                - rival.total_incidents * 2.2,
+            ),
+        )
+        rival_revenue_proxy = player_revenue * (0.38 + action_strength * 0.14)
+        rival_annualized_revenue = rival_revenue_proxy * 4
+        rival_market_multiple = 1.35 + (strategy_score / 95)
+        revenue_anchored = rival_annualized_revenue * rival_market_multiple
+        prior_anchor = rival.valuation * (0.92 + strategy_score / 520)
+
+        rival_pre_money = max(36_000_000, (revenue_anchored * 0.34) + (prior_anchor * 0.66))
+        rival_raise = 1_900_000 + (strategy_score * 28_000) + (action_strength * 380_000)
+        rival_raise = max(1_900_000, min(8_200_000, rival_raise))
+        rival_post_money = rival_pre_money + rival_raise
+
+        # Assume rival usually closes the round, but cap quarter-over-quarter spike.
+        target_valuation = max(rival_pre_money, rival_post_money * 0.94)
+        rival.valuation = min(target_valuation, pre_round_valuation * 1.34)
 
     def _build_leaderboard(self, session: GameSession, score_hint: float) -> list[LeaderboardEntry]:
         state = session.state

@@ -156,7 +156,20 @@ class ModelPerformanceSnapshot:
     balance: float
 
 
-RivalActionType = Literal["price_cut", "lock_in", "safety_campaign", "talent_poach"]
+RivalActionType = Literal[
+    "price_cut",
+    "lock_in",
+    "safety_campaign",
+    "talent_poach",
+    "predatory_pricing",
+    "regulatory_lobbying",
+    "moonshot_launch",
+    "data_center_blitz",
+    "upgrade_capability",
+    "upgrade_safety",
+    "upgrade_efficiency",
+    "upgrade_market",
+]
 
 
 @dataclass
@@ -168,7 +181,7 @@ class RivalAction:
 
 @dataclass
 class RivalState:
-    name: str = "Google Gemini"
+    name: str = "Rival AI"
     valuation: float = 68_000_000
     reputation: float = 74.0
     compliance: float = 70.0
@@ -189,6 +202,24 @@ class LeaderboardEntry:
 
 
 @dataclass
+class FinalStats:
+    year: int
+    quarter: int
+    valuation: float
+    cash: float
+    reputation: float
+    compliance: float
+    incidents: int
+    revenue: float
+    net_profit: float
+    score: float
+    band: str
+    player_rank: int
+    rival_valuation: float
+    rival_score: float
+
+
+@dataclass
 class GameSession:
     state: CompanyState
     quarter_spent: int = 0
@@ -199,4 +230,7 @@ class GameSession:
     rival_state: RivalState = field(default_factory=RivalState)
     rival_actions_last_quarter: List[RivalAction] = field(default_factory=list)
     leaderboard: List[LeaderboardEntry] = field(default_factory=list)
-    gemini_status: str = "not-run"
+    rival_status: str = "not-run"
+    game_completed: bool = False
+    final_stats: Optional[FinalStats] = None
+    epilogue: Optional[str] = None

@@ -34,3 +34,8 @@ def run_quarter(game_id: str) -> GameSessionResponse:
 @router.post("/games/{game_id}/funding", response_model=GameSessionResponse)
 def decide_funding(game_id: str, request: FundingDecisionRequest) -> GameSessionResponse:
     return _service.decide_funding(game_id, request)
+
+
+@router.post("/games/{game_id}/epilogue", response_model=GameSessionResponse)
+def generate_epilogue(game_id: str) -> GameSessionResponse:
+    return _service.generate_epilogue(game_id)

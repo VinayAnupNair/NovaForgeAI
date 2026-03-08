@@ -83,7 +83,16 @@ class PendingRoundResponse(BaseModel):
 
 
 class RivalActionResponse(BaseModel):
-    action_type: Literal["price_cut", "lock_in", "safety_campaign", "talent_poach"]
+    action_type: Literal[
+        "predatory_pricing",
+        "regulatory_lobbying",
+        "moonshot_launch",
+        "data_center_blitz",
+        "upgrade_capability",
+        "upgrade_safety",
+        "upgrade_efficiency",
+        "upgrade_market",
+    ]
     strength: float
     explanation: str
 
@@ -99,6 +108,23 @@ class LeaderboardEntryResponse(BaseModel):
     incidents: int
 
 
+class FinalStatsResponse(BaseModel):
+    year: int
+    quarter: int
+    valuation: float
+    cash: float
+    reputation: float
+    compliance: float
+    incidents: int
+    revenue: float
+    net_profit: float
+    score: float
+    band: str
+    player_rank: int
+    rival_valuation: float
+    rival_score: float
+
+
 class GameSessionResponse(BaseModel):
     game_id: str
     status: Literal["active", "bankrupt", "completed", "shutdown"]
@@ -109,9 +135,11 @@ class GameSessionResponse(BaseModel):
     model_metrics: List[ModelPerformanceResponse]
     rival_actions_last_quarter: List[RivalActionResponse]
     leaderboard: List[LeaderboardEntryResponse]
-    gemini_status: str
+    rival_status: str
     challenge_flags: List[str]
     pending_round: Optional[PendingRoundResponse] = None
+    final_stats: Optional[FinalStatsResponse] = None
+    epilogue: Optional[str] = None
 
 
 class RootResponse(BaseModel):
