@@ -82,6 +82,23 @@ class PendingRoundResponse(BaseModel):
     quarter_outcome: QuarterOutcomeResponse
 
 
+class RivalActionResponse(BaseModel):
+    action_type: Literal["price_cut", "lock_in", "safety_campaign", "talent_poach"]
+    strength: float
+    explanation: str
+
+
+class LeaderboardEntryResponse(BaseModel):
+    rank: int
+    name: str
+    is_player: bool
+    score: float
+    valuation: float
+    compliance: float
+    reputation: float
+    incidents: int
+
+
 class GameSessionResponse(BaseModel):
     game_id: str
     status: Literal["active", "bankrupt", "completed", "shutdown"]
@@ -90,6 +107,8 @@ class GameSessionResponse(BaseModel):
     upgrade_effects: Dict[str, Dict[str, float]]
     history: List[QuarterHistoryPointResponse]
     model_metrics: List[ModelPerformanceResponse]
+    rival_actions_last_quarter: List[RivalActionResponse]
+    leaderboard: List[LeaderboardEntryResponse]
     challenge_flags: List[str]
     pending_round: Optional[PendingRoundResponse] = None
 

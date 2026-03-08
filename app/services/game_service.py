@@ -8,11 +8,13 @@ from app.domain.funding import funding_offer
 from app.domain.models import (
     CompanyState,
     GameSession,
+    LeaderboardEntry,
     ModelPerformanceSnapshot,
     ModelUnit,
     PendingRound,
     QuarterHistoryPoint,
     QuarterOutcome,
+    RivalAction,
     UPGRADE_EFFECTS,
 )
 from app.domain.scoring import evaluate_company
@@ -23,19 +25,23 @@ from app.schemas.responses import (
     BudgetResponse,
     CompanyStateResponse,
     GameSessionResponse,
+    LeaderboardEntryResponse,
     ModelPerformanceResponse,
     ModelStateResponse,
     PendingRoundResponse,
     QuarterHistoryPointResponse,
     QuarterOutcomeResponse,
+    RivalActionResponse,
     WorldEventResponse,
 )
+from app.services.gemini_rival_service import GeminiRivalService
 from app.storage.memory_store import MemoryGameStore
 
 
 class GameService:
     def __init__(self, store: MemoryGameStore) -> None:
         self.store = store
+        self.rival_service = GeminiRivalService()
 
     def create_game(self, request: NewGameRequest) -> GameSessionResponse:
         trait_pool = ["aggressive", "conservative", "ops-heavy", "consumer-friendly"]
@@ -52,6 +58,7 @@ class GameService:
         game_id = str(uuid4())
         self.store.create(game_id, GameSession(state=state))
         session = self.get_session(game_id)
+        session.leaderboard = self._build_leaderboard(session, score_hint=0.0)
         return self.serialize_session(game_id, session)
 
     def get_game(self, game_id: str) -> GameSessionResponse:
@@ -105,6 +112,33 @@ class GameService:
         incidents = int(sum(m["incident"] for m in model_results))
         incident_costs = sum(m["incident_cost"] for m in model_results)
 
+        rival_actions = self.rival_service.choose_actions(state, event)
+        session.rival_actions_last_quarter = rival_actions
+
+        demand_penalty = 0.0
+        margin_penalty = 0.0
+        burn_penalty = 0.0
+        rival_rep_penalty = 0.0
+        rival_comp_penalty = 0.0
+
+        for action in rival_actions:
+            if action.action_type == "price_cut":
+                demand_penalty += 0.025 * action.strength
+                margin_penalty += 0.035 * action.strength
+            elif action.action_type == "lock_in":
+                demand_penalty += 0.045 * action.strength
+            elif action.action_type == "safety_campaign":
+                rival_rep_penalty += 0.9 * action.strength
+                if state.compliance < 60:
+                    rival_comp_penalty += 1.2 * action.strength
+            elif action.action_type == "talent_poach":
+                burn_penalty += 210_000 * action.strength
+
+        demand_penalty = min(0.22, demand_penalty)
+        margin_penalty = min(0.19, margin_penalty)
+        total_revenue *= max(0.75, 1 - demand_penalty)
+        total_gross_profit *= max(0.72, 1 - margin_penalty)
+
         avg_capability = sum(m.capability for m in state.models) / len(state.models)
         avg_safety = sum(m.safety for m in state.models) / len(state.models)
         avg_efficiency = sum(m.efficiency for m in state.models) / len(state.models)
@@ -117,6 +151,7 @@ class GameService:
 
         base_burn = 1_050_000 + sum(model.level_sum() for model in state.models) * 68_000
         base_burn *= event.operating_cost_multiplier
+        base_burn += burn_penalty
 
         # Force strategic tradeoffs: aggressive market/capability without safety+efficiency
         # causes regulatory pressure, extra burn, and trust/compliance penalties.
@@ -154,6 +189,7 @@ class GameService:
                 + trust_gain
                 - total_trust_hit
                 - pressure_trust_hit
+                - rival_rep_penalty
                 + event.reputation_shift,
             ),
         )
@@ -165,6 +201,7 @@ class GameService:
                 + compliance_gain
                 - total_compliance_hit
                 - pressure_compliance_hit
+                - rival_comp_penalty
                 + event.compliance_shift,
             ),
         )
@@ -200,6 +237,8 @@ class GameService:
             )
 
         session.model_metrics = model_metrics
+        self._update_rival_state(session, total_revenue, demand_penalty + margin_penalty)
+        session.leaderboard = self._build_leaderboard(session, score_hint=0.0)
 
         # If company health collapses, end the run immediately without a funding round.
         if state_status(state) != "active":
@@ -227,6 +266,7 @@ class GameService:
             burn=base_burn,
             avg_reliability=avg_reliability,
         )
+        session.leaderboard = self._build_leaderboard(session, score_hint=score)
 
         pre_money, raise_amount, dilution = funding_offer(state, score, total_revenue)
         post_money = pre_money + raise_amount
@@ -373,6 +413,95 @@ class GameService:
             upgrade_effects=UPGRADE_EFFECTS,
             history=[QuarterHistoryPointResponse(**asdict(point)) for point in session.history],
             model_metrics=[ModelPerformanceResponse(**asdict(m)) for m in session.model_metrics],
+            rival_actions_last_quarter=[
+                RivalActionResponse(**asdict(action)) for action in session.rival_actions_last_quarter
+            ],
+            leaderboard=[LeaderboardEntryResponse(**asdict(entry)) for entry in session.leaderboard],
             challenge_flags=challenge_flags,
             pending_round=pending_round,
         )
+
+    def _score_for_leaderboard(
+        self,
+        valuation: float,
+        compliance: float,
+        reputation: float,
+        incidents: int,
+        growth_signal: float,
+    ) -> float:
+        valuation_score = max(0.0, min(100.0, (valuation / 120_000_000) * 100))
+        incident_penalty = min(30.0, incidents * 2.4)
+        score = (
+            valuation_score * 0.35
+            + compliance * 0.25
+            + reputation * 0.2
+            + growth_signal * 0.2
+            - incident_penalty
+        )
+        return max(0.0, min(100.0, score))
+
+    def _update_rival_state(self, session: GameSession, player_revenue: float, pressure_strength: float) -> None:
+        rival = session.rival_state
+        growth_boost = max(0.0, min(0.2, 0.05 + pressure_strength * 0.35))
+        rival.valuation = max(45_000_000, rival.valuation * (1.01 + growth_boost) + player_revenue * 0.055)
+        rival.reputation = max(35.0, min(100.0, rival.reputation + 0.3 + pressure_strength * 2.0))
+        rival.compliance = max(30.0, min(97.0, rival.compliance + random.uniform(-1.1, 0.7)))
+        if random.random() < 0.12 + pressure_strength * 0.18:
+            rival.total_incidents += 1
+
+    def _build_leaderboard(self, session: GameSession, score_hint: float) -> list[LeaderboardEntry]:
+        state = session.state
+        rival = session.rival_state
+
+        if len(session.history) >= 2:
+            prev = session.history[-2].revenue
+            curr = session.history[-1].revenue
+            growth_rate = (curr - prev) / max(prev, 1.0)
+            growth_signal = max(0.0, min(100.0, 50 + growth_rate * 120))
+        elif len(session.history) == 1:
+            growth_signal = max(0.0, min(100.0, 50 + (session.history[-1].revenue / 4_000_000) * 8))
+        else:
+            growth_signal = 50.0
+
+        player_score = score_hint if score_hint > 0 else self._score_for_leaderboard(
+            valuation=state.valuation,
+            compliance=state.compliance,
+            reputation=state.reputation,
+            incidents=state.total_incidents,
+            growth_signal=growth_signal,
+        )
+        rival.score = self._score_for_leaderboard(
+            valuation=rival.valuation,
+            compliance=rival.compliance,
+            reputation=rival.reputation,
+            incidents=rival.total_incidents,
+            growth_signal=min(100.0, growth_signal + 8.0),
+        )
+
+        entries = [
+            LeaderboardEntry(
+                rank=0,
+                name=state.name,
+                is_player=True,
+                score=round(player_score, 2),
+                valuation=state.valuation,
+                compliance=state.compliance,
+                reputation=state.reputation,
+                incidents=state.total_incidents,
+            ),
+            LeaderboardEntry(
+                rank=0,
+                name=rival.name,
+                is_player=False,
+                score=round(rival.score, 2),
+                valuation=rival.valuation,
+                compliance=rival.compliance,
+                reputation=rival.reputation,
+                incidents=rival.total_incidents,
+            ),
+        ]
+
+        entries.sort(key=lambda entry: entry.score, reverse=True)
+        for idx, entry in enumerate(entries, start=1):
+            entry.rank = idx
+        return entries

@@ -156,6 +156,38 @@ class ModelPerformanceSnapshot:
     balance: float
 
 
+RivalActionType = Literal["price_cut", "lock_in", "safety_campaign", "talent_poach"]
+
+
+@dataclass
+class RivalAction:
+    action_type: RivalActionType
+    strength: float
+    explanation: str
+
+
+@dataclass
+class RivalState:
+    name: str = "Google Gemini"
+    valuation: float = 68_000_000
+    reputation: float = 74.0
+    compliance: float = 70.0
+    total_incidents: int = 0
+    score: float = 58.0
+
+
+@dataclass
+class LeaderboardEntry:
+    rank: int
+    name: str
+    is_player: bool
+    score: float
+    valuation: float
+    compliance: float
+    reputation: float
+    incidents: int
+
+
 @dataclass
 class GameSession:
     state: CompanyState
@@ -164,3 +196,6 @@ class GameSession:
     pending_round: Optional[PendingRound] = None
     history: List[QuarterHistoryPoint] = field(default_factory=list)
     model_metrics: List[ModelPerformanceSnapshot] = field(default_factory=list)
+    rival_state: RivalState = field(default_factory=RivalState)
+    rival_actions_last_quarter: List[RivalAction] = field(default_factory=list)
+    leaderboard: List[LeaderboardEntry] = field(default_factory=list)

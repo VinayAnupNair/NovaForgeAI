@@ -4,6 +4,12 @@ import "./App.css";
 const API_BASE = import.meta.env.VITE_API_BASE || "http://127.0.0.1:8000";
 
 const UPGRADE_TYPES = ["capability", "safety", "efficiency", "market"];
+const UPGRADE_SHORT_LABELS = {
+  capability: "CAP",
+  safety: "SAF",
+  efficiency: "EFF",
+  market: "MKT",
+};
 
 function clamp(value, low, high) {
   return Math.max(low, Math.min(value, high));
@@ -17,6 +23,13 @@ function formatMoney(value) {
   }).format(value || 0);
 }
 
+function formatCompactMoney(value) {
+  if (!Number.isFinite(value)) return "$0";
+  if (value >= 1_000_000) return `$${(value / 1_000_000).toFixed(2)}M`;
+  if (value >= 1_000) return `$${Math.round(value / 1_000)}k`;
+  return `$${Math.round(value)}`;
+}
+
 function scoreClass(score) {
   if (score >= 82) return "score-outstanding";
   if (score >= 68) return "score-strong";
@@ -25,7 +38,18 @@ function scoreClass(score) {
   return "score-critical";
 }
 
-function sparklinePoints(values, width = 280, height = 84, padding = 8) {
+function nextUpgradeCost(model, upgradeType) {
+  const currentLevel = model?.[upgradeType] ?? 1;
+  const baseCosts = {
+    capability: 700_000,
+    safety: 550_000,
+    efficiency: 600_000,
+    market: 650_000,
+  };
+  return Math.round(baseCosts[upgradeType] * (1 + 0.16 * (currentLevel - 1)));
+}
+
+function sparklinePoints(values, width = 280, height = 84, left = 26, right = 272, top = 10, bottom = 70) {
   if (!values.length) return "";
   const min = Math.min(...values);
   const max = Math.max(...values);
@@ -33,9 +57,9 @@ function sparklinePoints(values, width = 280, height = 84, padding = 8) {
 
   return values
     .map((value, index) => {
-      const x = padding + (index / Math.max(1, values.length - 1)) * (width - padding * 2);
+      const x = left + (index / Math.max(1, values.length - 1)) * (right - left);
       const normalized = (value - min) / range;
-      const y = height - padding - normalized * (height - padding * 2);
+      const y = bottom - normalized * (bottom - top);
       return `${x},${y}`;
     })
     .join(" ");
@@ -45,6 +69,9 @@ function Sparkline({ values, color, title }) {
   const chartValues = values.length ? values : [0, 0];
   const points = sparklinePoints(chartValues);
   const latest = chartValues[chartValues.length - 1] ?? 0;
+  const min = Math.min(...chartValues);
+  const max = Math.max(...chartValues);
+  const latestQuarter = Math.max(1, chartValues.length);
   return (
     <article className="spark-card">
       <div className="spark-head">
@@ -52,8 +79,15 @@ function Sparkline({ values, color, title }) {
         <strong>{Number(latest).toFixed(1)}</strong>
       </div>
       <svg viewBox="0 0 280 84" preserveAspectRatio="none" className="spark-svg" role="img" aria-label={title}>
+        <line className="spark-axis" x1="26" y1="10" x2="26" y2="70" />
+        <line className="spark-axis" x1="26" y1="70" x2="272" y2="70" />
         <polyline points={points} fill="none" stroke={color} strokeWidth="3" strokeLinejoin="round" strokeLinecap="round" />
+        <text className="spark-axis-text" x="2" y="14">{max.toFixed(1)}</text>
+        <text className="spark-axis-text" x="2" y="71">{min.toFixed(1)}</text>
+        <text className="spark-axis-text" x="24" y="82">Q1</text>
+        <text className="spark-axis-text" x="252" y="82">Q{latestQuarter}</text>
       </svg>
+      <p className="spark-axis-note">Y: metric value · X: quarter</p>
     </article>
   );
 }
@@ -203,12 +237,16 @@ function App() {
   const modelMetrics = game.model_metrics || [];
   const activeEvent = state.active_event;
   const isPausedByEvent = eventModalOpen && !!activeEvent;
+  const isReputationLow = state.reputation < 58;
+  const isComplianceLow = state.compliance < 58;
 
   const revenueTrend = history.map((h) => h.revenue / 1_000_000);
   const profitTrend = history.map((h) => h.net_profit / 1_000_000);
   const reputationTrend = history.map((h) => h.reputation);
   const complianceTrend = history.map((h) => h.compliance);
   const pressureTrend = history.map((h) => h.competitive_pressure * 10);
+  const leaderboard = game.leaderboard || [];
+  const rivalActions = game.rival_actions_last_quarter || [];
 
   return (
     <main className={`shell ${isShutdown ? "danger-mode" : ""} ${isPausedByEvent ? "paused" : ""}`}>
@@ -248,11 +286,11 @@ function App() {
             <label>VALUATION</label>
             <h2>{formatMoney(state.valuation)}</h2>
           </article>
-          <article className="metric-card">
+          <article className={`metric-card ${isReputationLow ? "metric-card-danger" : ""}`}>
             <label>REPUTATION</label>
             <h2>{state.reputation.toFixed(1)}</h2>
           </article>
-          <article className="metric-card">
+          <article className={`metric-card ${isComplianceLow ? "metric-card-danger" : ""}`}>
             <label>COMPLIANCE</label>
             <h2>{state.compliance.toFixed(1)}</h2>
           </article>
@@ -280,16 +318,22 @@ function App() {
               </p>
               <p className="model-age">LIVE FOR {model.quarters_live} QUARTERS</p>
               <div className="upgrade-buttons">
-                {UPGRADE_TYPES.map((upgradeType) => (
+                {UPGRADE_TYPES.map((upgradeType) => {
+                  const upgradeCost = nextUpgradeCost(model, upgradeType);
+                  const unaffordable = upgradeCost > game.budget.remaining;
+                  return (
                   <button
                     key={upgradeType}
                     className="btn upgrade"
                     onClick={() => void applyUpgrade(modelIndex, upgradeType)}
-                    disabled={actionLoading || !!pending || isGameOver || isPausedByEvent}
+                    disabled={actionLoading || !!pending || isGameOver || isPausedByEvent || unaffordable}
+                    title={`Upgrade ${upgradeType} for ${formatMoney(upgradeCost)}`}
                   >
-                    + {upgradeType.toUpperCase()}
+                    <span className="upgrade-label">+ {UPGRADE_SHORT_LABELS[upgradeType]}</span>
+                    <span className="upgrade-cost">{formatCompactMoney(upgradeCost)}</span>
                   </button>
-                ))}
+                  );
+                })}
               </div>
             </article>
           ))}
@@ -316,6 +360,47 @@ function App() {
                 <li key={flag}>{flag.toUpperCase()}</li>
               ))}
             </ul>
+          </article>
+
+          <article className="leaderboard-card">
+            <h3>LEADERBOARD (YOU VS GEMINI)</h3>
+            <p className="leaderboard-note">Powered by backend Gemini rival decisions each quarter.</p>
+            <table>
+              <thead>
+                <tr>
+                  <th>RANK</th>
+                  <th>TEAM</th>
+                  <th>SCORE</th>
+                  <th>VALUATION</th>
+                  <th>COMP</th>
+                </tr>
+              </thead>
+              <tbody>
+                {leaderboard.map((entry, index) => (
+                  <tr key={entry.name} className={entry.isPlayer ? "player-row" : "rival-row"}>
+                    <td>#{entry.rank || index + 1}</td>
+                    <td>{entry.isPlayer ? `${entry.name} (YOU)` : entry.name}</td>
+                    <td>{entry.score.toFixed(1)}</td>
+                    <td>{formatCompactMoney(entry.valuation)}</td>
+                    <td>{entry.compliance.toFixed(1)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <div className="rival-action-feed">
+              <p>Gemini Moves:</p>
+              {rivalActions.length ? (
+                <ul>
+                  {rivalActions.map((action, idx) => (
+                    <li key={`${action.action_type}-${idx}`}>
+                      {action.action_type.replaceAll("_", " ").toUpperCase()} ({action.strength.toFixed(2)}): {action.explanation}
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <span>No rival pressure applied yet.</span>
+              )}
+            </div>
           </article>
         </section>
 
@@ -427,6 +512,22 @@ function App() {
             <p className="event-impact-line">Impact: {activeEvent.impact}</p>
             <button className="btn primary" onClick={() => setEventModalOpen(false)}>
               ACKNOWLEDGE EVENT
+            </button>
+          </article>
+        </div>
+      ) : null}
+
+      {isShutdown ? (
+        <div className="shutdown-modal-backdrop" role="dialog" aria-modal="true" aria-label="Company shutdown">
+          <article className="shutdown-modal">
+            <p className="event-kicker">END OF RUN</p>
+            <h2>COMPANY SHUTDOWN</h2>
+            <p>Reputation and compliance dropped below the survival threshold.</p>
+            <p className="event-impact-line">
+              Final health: REP {state.reputation.toFixed(1)} / COMP {state.compliance.toFixed(1)}
+            </p>
+            <button className="btn primary" onClick={() => void createGame()} disabled={actionLoading}>
+              START NEW RUN
             </button>
           </article>
         </div>
